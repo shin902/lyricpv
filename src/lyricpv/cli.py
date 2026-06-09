@@ -2,7 +2,6 @@
 
 使い方:
     lyricpv analyze <YouTube URL または音声ファイル> [-o 出力先] [--lyrics 歌詞ファイル]
-    lyricpv serve [--port 8000]
 """
 
 from __future__ import annotations
@@ -28,17 +27,11 @@ def main(argv: list[str] | None = None) -> int:
     p_analyze.add_argument("--device", default=None, choices=["mps", "cuda", "cpu"], help="計算デバイス (既定: 自動)")
     p_analyze.add_argument("--skip-separation", action="store_true", help="音源分離を省略する (高速・低品質)")
 
-    p_serve = sub.add_parser("serve", help="WebUI (解析ツール) を起動する")
-    p_serve.add_argument("--host", default="127.0.0.1")
-    p_serve.add_argument("--port", type=int, default=8000)
-
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     if args.command == "analyze":
         return _cmd_analyze(args)
-    if args.command == "serve":
-        return _cmd_serve(args)
     return 2
 
 
