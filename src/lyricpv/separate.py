@@ -15,9 +15,12 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
-import torch
 
+# torch のロード前に PYTORCH_ENABLE_MPS_FALLBACK を設定する必要があるため、
+# device モジュールを必ず先に import する (device.py の docstring 参照)
 from .device import pick_device
+
+import torch  # noqa: E402
 
 DEFAULT_MODEL = "htdemucs"
 
