@@ -50,10 +50,12 @@ def slugify(text: str) -> str:
 
 
 class JobManager:
-    def __init__(self, data_dir: str | Path):
+    def __init__(self, data_dir: str | Path, max_concurrency: int = 1):
         self.data_dir = Path(data_dir)
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
+        # Demucs はメモリ・GPU 負荷が大きいため既定で 1 ジョブずつ実行する
+        self._slots = threading.Semaphore(max_concurrency)
 
     def submit(self, source: str, options: PipelineOptions) -> Job:
         job = Job(id=uuid.uuid4().hex[:12], source=source)
@@ -81,25 +83,36 @@ class JobManager:
                 job.message = message
 
         with job.lock:
-            job.status = "running"
-        try:
-            song_id = slugify(options.title or Path(job.source).stem or "song")
-            out_dir = self._unique_dir(song_id)
-            result = run(job.source, out_dir, options=options, progress=progress)
+            job.message = "他のジョブの完了を待っています"
+        with self._slots:
             with job.lock:
-                job.status = "done"
-                job.song_id = out_dir.name
-                job.message = f"完了 (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})"
-        except Exception as e:  # ジョブの失敗は API 経由でユーザーに見せる
-            with job.lock:
-                job.status = "error"
-                job.error = f"{type(e).__name__}: {e}"
+                job.status = "running"
+                job.message = ""
+            try:
+                song_id = slugify(options.title or Path(job.source).stem or "song")
+                out_dir = self._unique_dir(song_id)
+                result = run(job.source, out_dir, options=options, progress=progress)
+                with job.lock:
+                    job.status = "done"
+                    job.song_id = out_dir.name
+                    job.message = f"完了 (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})"
+            except Exception as e:  # ジョブの失敗は API 経由でユーザーに見せる
+                with job.lock:
+                    job.status = "error"
+                    job.error = f"{type(e).__name__}: {e}"
 
     def _unique_dir(self, song_id: str) -> Path:
-        """既存の解析結果を壊さないよう、重複時は連番を付ける。"""
+        """既存の解析結果を壊さないよう、重複時は連番を付ける。
+
+        exists() チェックと mkdir の間のレース (TOCTOU) を避けるため、
+        mkdir(exist_ok=False) の成功でディレクトリを確保する。
+        """
         candidate = self.data_dir / song_id
         n = 2
-        while candidate.exists():
-            candidate = self.data_dir / f"{song_id}-{n}"
-            n += 1
-        return candidate
+        while True:
+            try:
+                candidate.mkdir(parents=True, exist_ok=False)
+                return candidate
+            except FileExistsError:
+                candidate = self.data_dir / f"{song_id}-{n}"
+                n += 1
