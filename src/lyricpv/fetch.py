@@ -105,10 +105,10 @@ def import_file(path: str | Path, out_dir: str | Path, *,
     out_dir.mkdir(parents=True, exist_ok=True)
 
     wav_path = out_dir / MASTER_FILENAME
-    if path.suffix.lower() == ".wav" and path != wav_path:
-        # WAV でもサンプルレート統一のため必ず ffmpeg を通す
-        _ffmpeg_to_master(path, wav_path)
-    else:
+    # 入力がマスター自身 (再解析) のときは変換しない: ffmpeg -y が読み込み中の
+    # ファイルへ上書き出力して壊すため。それ以外は WAV でもサンプルレート統一の
+    # ため必ず ffmpeg を通す。
+    if path.resolve() != wav_path.resolve():
         _ffmpeg_to_master(path, wav_path)
 
     return FetchResult(

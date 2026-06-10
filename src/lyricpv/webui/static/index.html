@@ -139,6 +139,8 @@ form.addEventListener("submit", async (e) => {
     }
     const { jobId } = await res.json();
     await poll(jobId);
+  } catch (err) {
+    showStatus("error", `❌ サーバーと通信できません\n${err}`);
   } finally {
     submitBtn.disabled = false;
   }

@@ -10,7 +10,8 @@
 
 from __future__ import annotations
 
-_SMALL_KANA = set("ャュョァィゥェォヮゃゅょぁぃぅぇぉゎ")
+# 直前の文字と 1 モーラを成す小書き仮名 (align.py の char 按分重みでも使う)
+SMALL_KANA = frozenset("ャュョァィゥェォヮゃゅょぁぃぅぇぉゎ")
 
 _KATAKANA_RANGE = (0x30A0, 0x30FF)
 _HIRAGANA_RANGE = (0x3040, 0x309F)
@@ -33,7 +34,7 @@ def split_mora(reading: str) -> list[str]:
     for ch in reading:
         if ch.isspace():
             continue
-        if ch in _SMALL_KANA and moras and is_kana(moras[-1][-1]):
+        if ch in SMALL_KANA and moras and is_kana(moras[-1][-1]):
             moras[-1] += ch
         else:
             moras.append(ch)

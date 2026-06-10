@@ -9,8 +9,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
+
+_log = logging.getLogger(__name__)
 
 _LINE_TAG = re.compile(r"\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]")
 _WORD_TAG = re.compile(r"<(\d+):(\d{1,2})(?:[.:](\d{1,3}))?>")
@@ -48,7 +51,10 @@ def parse_lrc(text: str) -> list[LyricLine]:
 
         tags = list(_LINE_TAG.finditer(raw))
         if not tags or tags[0].start() != 0:
-            if not raw.startswith("["):
+            if raw.startswith("["):
+                # 既知のメタタグでも時刻タグでもない [...] 行は歌詞と判別できない
+                _log.warning("LRC の未知タグ行をスキップしました: %s", raw)
+            else:
                 lines.append(LyricLine(text=raw))
             continue
 

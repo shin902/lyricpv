@@ -15,14 +15,13 @@ from __future__ import annotations
 from ..schema import AmplitudePoint, Char, Phrase, Word
 from .lrc import LyricLine, is_synced, is_word_synced
 from .morph import MorphWord, analyze_line
-from .mora import is_kana
+from .mora import SMALL_KANA, is_kana
 
 # 1 モーラあたりの歌唱時間の上限 (これ以上は間奏とみなし行を切り上げる)
 _MAX_MS_PER_MORA = 500
 _LINE_TAIL_MARGIN_MS = 800
 
-# char 按分の重み: 小書き仮名・促音・長音は短く発音される
-_SMALL_KANA = set("ャュョァィゥェォヮゃゅょぁぃぅぇぉゎ")
+# char 按分の重み: 促音・撥音・長音は短く発音される (小書き仮名は mora.SMALL_KANA)
 _SHORT_KANA = set("ッっーンん")
 
 
@@ -173,7 +172,7 @@ def _distribute_chars(surface: str, start: int, end: int) -> list[Char]:
         return []
 
     def weight(c: str) -> float:
-        if c in _SMALL_KANA:
+        if c in SMALL_KANA:
             return 0.3
         if c in _SHORT_KANA:
             return 0.6

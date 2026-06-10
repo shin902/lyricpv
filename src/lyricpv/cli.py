@@ -44,7 +44,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
+    from .fetch import check_external_tools, extract_youtube_id
     from .pipeline import PipelineOptions, run
+
+    missing = check_external_tools()
+    if missing:
+        print(f"必要な外部コマンドが見つかりません: {', '.join(missing)} (brew install ffmpeg)", file=sys.stderr)
+        return 1
 
     lyrics_text = None
     if args.lyrics:
@@ -53,7 +59,11 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     if args.out_dir:
         out_dir = Path(args.out_dir)
     else:
-        stem = Path(args.source).stem if not args.source.startswith("http") else "youtube"
+        if args.source.startswith("http"):
+            # 動画 ID で曲ごとに分ける (固定名だと2曲目が1曲目を上書きする)
+            stem = extract_youtube_id(args.source) or "youtube"
+        else:
+            stem = Path(args.source).stem
         out_dir = Path("data/songs") / stem
 
     options = PipelineOptions(
@@ -71,13 +81,6 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 
     result = run(args.source, out_dir, options=options, progress=progress)
     print(f"完了: {result.json_path} (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})")
-    return 0
-
-
-def _cmd_serve(args: argparse.Namespace) -> int:
-    import uvicorn
-
-    uvicorn.run("lyricpv.webui.app:app", host=args.host, port=args.port)
     return 0
 
 

@@ -84,7 +84,10 @@ def separate(
     except (RuntimeError, NotImplementedError) as e:
         if dev.type == "cpu":
             raise SeparationError(f"音源分離に失敗しました: {e}") from e
-        sources = _apply(apply_model, model, normalized, torch.device("cpu"))
+        try:
+            sources = _apply(apply_model, model, normalized, torch.device("cpu"))
+        except (RuntimeError, NotImplementedError) as e2:
+            raise SeparationError(f"音源分離に失敗しました (CPU リトライも失敗): {e2}") from e2
         device_used = "cpu"
 
     sources = sources * (ref.std() + 1e-8) + ref.mean()

@@ -158,12 +158,21 @@ def _detect_segments(
     bound_ms = [int(t * 1000) for t in librosa.frames_to_time(bound_frames, sr=sr, hop_length=HOP)]
     bound_ms = sorted(set([0] + bound_ms + [duration_ms]))
 
+    # 2 秒未満の断片は境界を間引いて隣の区間にまとめる (segments に隙間を作らない)
+    min_span_ms = 2000
+    pruned = [bound_ms[0]]
+    for b in bound_ms[1:-1]:
+        if b - pruned[-1] >= min_span_ms:
+            pruned.append(b)
+    if len(pruned) > 1 and bound_ms[-1] - pruned[-1] < min_span_ms:
+        pruned.pop()
+    pruned.append(bound_ms[-1])
+    bound_ms = pruned
+
     rms = librosa.feature.rms(y=y, hop_length=HOP)[0]
 
     spans: list[tuple[int, int, np.ndarray, float]] = []  # (start, end, chroma平均, energy)
     for s, e in zip(bound_ms[:-1], bound_ms[1:]):
-        if e - s < 2000:  # 2 秒未満の断片は隣とまとめる対象
-            continue
         f0 = int(s / 1000 * sr / HOP)
         f1 = max(f0 + 1, int(e / 1000 * sr / HOP))
         spans.append((s, e, chroma[:, f0:f1].mean(axis=1), float(rms[f0:f1].mean())))
