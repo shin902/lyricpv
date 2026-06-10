@@ -24,7 +24,7 @@ from . import music_map
 from .fetch import FetchResult, fetch_youtube, import_file, is_url
 from .lyrics.align import align
 from .lyrics.fetch import fetch_lyrics
-from .lyrics.lrc import LyricLine, parse_lrc
+from .lyrics.lrc import LyricLine, is_word_synced, parse_lrc
 from .schema import LyricData, SongMeta, SongSource
 from .separate import separate
 
@@ -34,8 +34,6 @@ LYRIC_DATA_FILENAME = "lyric_data.json"
 META_FILENAME = "meta.json"
 
 ProgressCallback = Callable[[str, str], None]
-
-_STAGES = ("fetch", "separate", "music_map", "lyrics", "align", "save")
 
 
 @dataclass
@@ -174,7 +172,10 @@ def _get_lyrics(
     if options.lyrics_text:
         lines = parse_lrc(options.lyrics_text)
         if any(ln.start_ms is not None for ln in lines):
-            tier = "T1" if any(ln.words for ln in lines) else "T2"
+            # align() の経路選択 (is_word_synced) と同じ基準で Tier を判定する。
+            # 一部の行のみ逐字タグを持つ LRC は align() 側で T2 経路になるため、
+            # ここで T1 と報告すると meta.json と実際の整合が食い違う。
+            tier = "T1" if is_word_synced(lines) else "T2"
         else:
             tier = "T3"
         return lines, tier

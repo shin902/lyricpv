@@ -55,6 +55,26 @@ def test_pipeline_with_local_file_and_lrc(synth_wav_path, tmp_path):
     assert stages.index("fetch") < stages.index("music_map") < stages.index("save")
 
 
+def test_partial_word_sync_reports_tier_t2(synth_wav_path, tmp_path):
+    # 1 行目のみ逐字タグがあり 2 行目は行タイミングのみの LRC。
+    # align() は is_word_synced (全行が逐字) でないため T2 経路を取るので、
+    # meta.json / lyrics_tier も T1 ではなく T2 と整合させる
+    lrc = (
+        "[00:01.00] <00:01.00> 夜に <00:02.00> 駆ける\n"
+        "[00:04.00] 君の声が聞こえる\n"
+    )
+
+    result = run(
+        str(synth_wav_path),
+        tmp_path / "out",
+        options=PipelineOptions(lyrics_text=lrc, skip_separation=True),
+    )
+
+    assert result.lyrics_tier == "T2"
+    meta = json.loads((result.out_dir / "meta.json").read_text(encoding="utf-8"))
+    assert meta["lyricsTier"] == "T2"
+
+
 def test_pipeline_without_lyrics_yields_empty_phrases(synth_wav_path, tmp_path, monkeypatch):
     # 歌詞検索をネットワークに出さずに T4 を再現する
     import lyricpv.pipeline as pipeline_mod
