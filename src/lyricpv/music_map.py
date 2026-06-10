@@ -258,14 +258,19 @@ def _valence_arousal(
         f1 = min(f0 + frames_per_window, n_frames)
         c = chroma[:, f0:f1].mean(axis=1)
 
-        major_corr = max(np.corrcoef(np.roll(_MAJOR_PROFILE, k), c)[0, 1] for k in range(12))
-        minor_corr = max(np.corrcoef(np.roll(_MINOR_PROFILE, k), c)[0, 1] for k in range(12))
-        mode_term = float(np.clip((major_corr - minor_corr) * 3, -1.0, 1.0))
+        # 無音窓のクロマは分散ゼロで np.corrcoef が NaN を返す (JSON を壊す) ため
+        # 長短調の判定は保留し中立 (0.0) とする
+        if float(np.std(c)) < 1e-9:
+            mode_term = 0.0
+        else:
+            major_corr = max(np.corrcoef(np.roll(_MAJOR_PROFILE, k), c)[0, 1] for k in range(12))
+            minor_corr = max(np.corrcoef(np.roll(_MINOR_PROFILE, k), c)[0, 1] for k in range(12))
+            mode_term = float(np.clip((major_corr - minor_corr) * 3, -1.0, 1.0))
         brightness = float(np.clip(centroid[f0:f1].mean() / centroid_scale * 2 - 1, -1.0, 1.0))
-        valence = float(np.clip(0.7 * mode_term + 0.3 * brightness, -1.0, 1.0))
+        valence = float(np.nan_to_num(np.clip(0.7 * mode_term + 0.3 * brightness, -1.0, 1.0)))
 
         energy = float(np.clip(rms[f0:f1].mean() / rms_scale * 2 - 1, -1.0, 1.0))
-        arousal = float(np.clip(0.5 * tempo_term + 0.5 * energy, -1.0, 1.0))
+        arousal = float(np.nan_to_num(np.clip(0.5 * tempo_term + 0.5 * energy, -1.0, 1.0)))
 
         t_ms = int(f0 * HOP / sr * 1000)
         points.append(VAPoint(time=t_ms, valence=round(valence, 3), arousal=round(arousal, 3)))

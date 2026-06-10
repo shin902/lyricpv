@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -164,7 +165,9 @@ class LyricData:
         data = self.to_dict()
         validate(data)
         Path(path).write_text(
-            json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8"
+            # allow_nan=False: NaN/Infinity は JSON.parse がファイル全体を読めなくする
+            json.dumps(data, ensure_ascii=False, indent=1, allow_nan=False),
+            encoding="utf-8",
         )
 
     @classmethod
@@ -227,10 +230,15 @@ def _require(cond: bool, message: str) -> None:
         raise SchemaError(message)
 
 
+def _require_finite(value: Any, message: str) -> None:
+    _require(isinstance(value, (int, float)) and math.isfinite(value), message)
+
+
 def validate(data: dict[str, Any]) -> None:
     """契約A の JSON (dict) を検証し、不正なら SchemaError を送出する。
 
-    検証内容: 必須キー、時刻の単調性 (start <= end)、リスト要素の時刻昇順。
+    検証内容: 必須キー、時刻の単調性 (start <= end)、リスト要素の時刻昇順、
+    数値の有限性 (NaN/Infinity 禁止) と値域 (amplitude 0–1 / V-A -1〜1)。
     """
     _require(isinstance(data, dict), "ルートはオブジェクトである必要があります")
     song = data.get("song")
@@ -247,10 +255,22 @@ def validate(data: dict[str, Any]) -> None:
         _require(p["startTime"] <= p["endTime"], f"phrase の時刻が逆転: {p.get('text', '')!r}")
         _require(p["startTime"] >= prev_phrase_start, "phrases は startTime 昇順である必要があります")
         prev_phrase_start = p["startTime"]
+        prev_word_start = -1
         for w in p.get("words", []):
             _require(w["startTime"] <= w["endTime"], f"word の時刻が逆転: {w.get('text', '')!r}")
+            _require(
+                w["startTime"] >= prev_word_start,
+                f"phrase 内の words は startTime 昇順である必要があります: {p.get('text', '')!r}",
+            )
+            prev_word_start = w["startTime"]
+            prev_char_start = -1
             for c in w.get("chars", []):
                 _require(c["startTime"] <= c["endTime"], f"char の時刻が逆転: {c.get('char', '')!r}")
+                _require(
+                    c["startTime"] >= prev_char_start,
+                    f"word 内の chars は startTime 昇順である必要があります: {w.get('text', '')!r}",
+                )
+                prev_char_start = c["startTime"]
 
     for name, items in (("beats", "startTime"), ("amplitude", "time"), ("valenceArousal", "time")):
         times = [item[items] for item in data.get(name, [])]
@@ -261,4 +281,15 @@ def validate(data: dict[str, Any]) -> None:
             _require(
                 item["startTime"] <= item["endTime"],
                 f"{name} の時刻が逆転: {item.get('name', item.get('label', ''))!r}",
+            )
+
+    for a in data.get("amplitude", []):
+        _require_finite(a["value"], f"amplitude.value が有限の数値ではありません (time={a.get('time')})")
+        _require(0.0 <= a["value"] <= 1.0, f"amplitude.value は 0–1 の範囲です (time={a.get('time')})")
+    for v in data.get("valenceArousal", []):
+        for key in ("valence", "arousal"):
+            _require_finite(v[key], f"valenceArousal.{key} が有限の数値ではありません (time={v.get('time')})")
+            _require(
+                -1.0 <= v[key] <= 1.0,
+                f"valenceArousal.{key} は -1〜1 の範囲です (time={v.get('time')})",
             )
