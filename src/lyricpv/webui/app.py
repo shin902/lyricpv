@@ -103,7 +103,3 @@ def create_app(data_dir: str | Path | None = None) -> FastAPI:
         return FileResponse(path, media_type="application/json")
 
     return app
-
-
-# `uvicorn lyricpv.webui.app:app` / `lyricpv serve` 用のモジュールレベル app
-app = create_app()

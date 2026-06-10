@@ -100,7 +100,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         import os
 
         os.environ["LYRICPV_DATA_DIR"] = args.data_dir
-    uvicorn.run("lyricpv.webui.app:app", host=args.host, port=args.port)
+    uvicorn.run("lyricpv.webui.app:create_app", host=args.host, port=args.port, factory=True)
     return 0
 
 
