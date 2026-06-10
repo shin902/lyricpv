@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# プロジェクトデータ(解析済み楽曲・音源は再配布しない)
+data/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+
+
+.serena
