@@ -1,7 +1,8 @@
 """モーラ按分アライメントのテスト。"""
 
-from lyricpv.lyrics.align import align
+from lyricpv.lyrics.align import _MAX_MS_PER_MORA, _TYPICAL_MS_PER_MORA, align
 from lyricpv.lyrics.lrc import parse_lrc
+from lyricpv.lyrics.morph import analyze_line
 from lyricpv.schema import AmplitudePoint
 
 
@@ -73,3 +74,16 @@ def test_small_kana_gets_shorter_span():
     by_char = {c.char: c.end_time - c.start_time for c in chars}
     # 小書き「ャ」は通常文字より短い
     assert by_char["ャ"] < by_char["キ"]
+
+
+def test_word_synced_last_word_uses_typical_mora_duration():
+    # 最終単語に次の時刻が無い場合の長さ推定は、上限値 (500ms/モーラ) で
+    # 引き伸ばすのではなく典型値 (180ms/モーラ) を使う
+    lines = parse_lrc("[00:10.00] <00:10.00> ありがとうございます\n")
+    phrases = align(lines, 200_000)
+    last_word = phrases[0].words[-1]
+    duration = last_word.end_time - last_word.start_time
+
+    moras = sum(m.mora_count for m in analyze_line(last_word.text))
+    assert duration == moras * _TYPICAL_MS_PER_MORA
+    assert duration < moras * _MAX_MS_PER_MORA

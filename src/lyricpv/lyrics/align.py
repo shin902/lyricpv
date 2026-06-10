@@ -21,6 +21,11 @@ from .mora import SMALL_KANA, is_kana
 _MAX_MS_PER_MORA = 500
 _LINE_TAIL_MARGIN_MS = 800
 
+# 逐字 (T1) の最終単語など、次の時刻が無い場合の長さ推定に使う
+# 1 モーラあたりの典型的な歌唱時間。_MAX_MS_PER_MORA (間奏とみなす上限) を
+# そのまま使うと 5 モーラ語が 2.5 秒に伸びてしまうため別定数にする。
+_TYPICAL_MS_PER_MORA = 180
+
 # char 按分の重み: 促音・撥音・長音は短く発音される (小書き仮名は mora.SMALL_KANA)
 _SHORT_KANA = set("ッっーンん")
 
@@ -74,7 +79,7 @@ def _align_word_synced(lines: list[LyricLine], duration_ms: int) -> list[Phrase]
             if w_end is None:
                 morphs = analyze_line(tw.text)
                 moras = sum(m.mora_count for m in morphs) or len(tw.text)
-                w_end = min(next_line_start, w_start + moras * _MAX_MS_PER_MORA)
+                w_end = min(next_line_start, w_start + moras * _TYPICAL_MS_PER_MORA)
             w_end = max(w_start + 1, w_end)
             pos = _first_pos(tw.text)
             words.append(
