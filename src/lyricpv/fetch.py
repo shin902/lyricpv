@@ -121,9 +121,18 @@ def import_file(path: str | Path, out_dir: str | Path, *,
     )
 
 
+def is_url(source: str) -> bool:
+    """source が http(s) URL かどうかを判定する。
+
+    ローカルファイル名 (例: "http_test.wav") を URL と誤判定しないよう、
+    スキームまで含めて判定する。
+    """
+    return source.startswith(("http://", "https://"))
+
+
 def extract_youtube_id(url: str) -> str | None:
     """URL から YouTube 動画 ID を抜き出す (失敗時 None)。"""
-    m = re.search(r"(?:v=|youtu\.be/|shorts/)([A-Za-z0-9_-]{11})", url)
+    m = re.search(r"(?:v=|youtu\.be/|shorts/|embed/)([A-Za-z0-9_-]{11})", url)
     return m.group(1) if m else None
 
 

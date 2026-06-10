@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
-    from .fetch import check_external_tools, extract_youtube_id
+    from .fetch import check_external_tools, extract_youtube_id, is_url
     from .pipeline import PipelineOptions, run
 
     missing = check_external_tools()
@@ -59,7 +59,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     if args.out_dir:
         out_dir = Path(args.out_dir)
     else:
-        if args.source.startswith("http"):
+        if is_url(args.source):
             # 動画 ID で曲ごとに分ける (固定名だと2曲目が1曲目を上書きする)
             stem = extract_youtube_id(args.source) or "youtube"
         else:

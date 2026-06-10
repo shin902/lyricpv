@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import music_map
-from .fetch import FetchResult, fetch_youtube, import_file
+from .fetch import FetchResult, fetch_youtube, import_file, is_url
 from .lyrics.align import align
 from .lyrics.fetch import fetch_lyrics
 from .lyrics.lrc import LyricLine, parse_lrc
@@ -162,7 +162,7 @@ def run(
 
 
 def _fetch(source: str, out_dir: Path, options: PipelineOptions) -> FetchResult:
-    if source.startswith(("http://", "https://")):
+    if is_url(source):
         return fetch_youtube(source, out_dir)
     return import_file(source, out_dir, title=options.title, artist=options.artist)
 
