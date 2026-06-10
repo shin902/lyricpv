@@ -38,17 +38,23 @@ def _ffmpeg_to_master(src: Path, dst: Path) -> None:
         "-vn", "-ac", "2", "-ar", str(MASTER_SAMPLE_RATE),
         "-c:a", "pcm_s16le", str(dst),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired as e:
+        raise FetchError(f"ffmpeg がタイムアウトしました: {src}") from e
     if proc.returncode != 0:
         raise FetchError(f"ffmpeg での WAV 変換に失敗しました: {proc.stderr[-500:]}")
 
 
 def _probe_duration_ms(path: Path) -> int:
-    proc = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-        capture_output=True, text=True, timeout=60,
-    )
+    try:
+        proc = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, timeout=60,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise FetchError(f"ffprobe がタイムアウトしました: {path}") from e
     if proc.returncode != 0 or not proc.stdout.strip():
         raise FetchError(f"ffprobe で長さを取得できませんでした: {path}")
     return int(float(proc.stdout.strip()) * 1000)
@@ -61,6 +67,12 @@ def fetch_youtube(url: str, out_dir: str | Path) -> FetchResult:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     raw_template = str(out_dir / "source.%(ext)s")
+
+    # 前回の失敗実行で source.* (例: .webm) が残っていると、新規ダウンロード分
+    # (例: .m4a) と混在して下の glob が古いファイルを拾いかねないため、
+    # ダウンロード前に掃除する
+    for stale in out_dir.glob("source.*"):
+        stale.unlink()
 
     opts = {
         "format": "bestaudio/best",
