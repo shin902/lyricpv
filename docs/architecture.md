@@ -66,9 +66,14 @@ sdk/lyric-player.mjs   契約B: ランタイム SDK(依存ゼロ ES module)
 - valence: Krumhansl プロファイルとの長短調相関差(70%)+ スペクトル重心の明るさ(30%)
 - arousal: テンポ(50%)+ RMS エネルギー(50%)、5 秒窓で時系列化
 
-### 6. WebUI: スコープ外
+### 6. WebUI: 解析フロントエンドに限定
 
-当初計画にあった WebUI(解析フロントエンド)はユーザー判断でスコープから削除。解析は CLI(`lyricpv analyze`)、描画アニメーションは本プロジェクトの管轄外(SDK 利用者の責務)。
+WebUI は「解析の投入・進捗・JSON 取得」だけを担う薄い任意機能(`--extra webui`)とし、描画・アニメーションは持たせない(SDK 利用者の責務 — 設計思想の通り)。
+
+- `webui/jobs.py`: ワーカースレッドによるインメモリのジョブ管理(ローカルツール想定で永続化なし)
+- `webui/app.py`: FastAPI。投入 `POST /api/songs` → 進捗 `GET /api/jobs/{id}` → 取得 `GET /api/songs/{id}/lyric_data.json`
+- フロントは vanilla JS の 1 ページのみ
+- 実機確認済み: 実 HTTP 経由のフル解析で `デバイス: mps` を確認(Demucs 分離が MPS で実行される)
 
 ## 処理フロー(pipeline.py)
 

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lyricpv — 解析フロントエンド</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; background: #14151a; color: #e8e8ec;
+         max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; margin-top: 2rem; }
+  .muted { color: #9a9aa6; font-size: .85rem; }
+  form { display: grid; gap: .6rem; background: #1d1e25; padding: 1rem; border-radius: 10px; }
+  label { display: grid; gap: .25rem; font-size: .85rem; color: #b9b9c4; }
+  input[type=text], textarea { background: #14151a; color: #e8e8ec; border: 1px solid #34353f;
+         border-radius: 6px; padding: .5rem; font-size: .9rem; }
+  textarea { min-height: 90px; font-family: ui-monospace, monospace; }
+  .row { display: flex; gap: 1.2rem; align-items: center; font-size: .85rem; }
+  button { background: #4c6ef5; color: #fff; border: 0; border-radius: 6px;
+           padding: .55rem 1rem; font-size: .95rem; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { margin-top: .8rem; padding: .7rem; border-radius: 8px; background: #1d1e25;
+            font-size: .9rem; white-space: pre-wrap; display: none; }
+  #status.error { border-left: 3px solid #fa5252; }
+  #status.running { border-left: 3px solid #fab005; }
+  #status.done { border-left: 3px solid #40c057; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid #2a2b33; }
+  a { color: #74a0ff; }
+</style>
+</head>
+<body>
+<h1>lyricpv <span class="muted">— 文字PV生成 SDK / 解析フロントエンド</span></h1>
+<p class="muted">楽曲を解析して TextAlive 互換 JSON(契約A)を生成します。描画・アニメーションは
+ランタイム SDK(<code>sdk/lyric-player.mjs</code>)の利用者が実装します。</p>
+
+<form id="form">
+  <label>音源(YouTube URL または サーバー上のファイルパス)
+    <input type="text" name="source" placeholder="https://www.youtube.com/watch?v=... または /path/to/song.wav" required>
+  </label>
+  <div class="row">
+    <label style="flex:1">タイトル(任意)<input type="text" name="title"></label>
+    <label style="flex:1">アーティスト(任意)<input type="text" name="artist"></label>
+  </div>
+  <label>歌詞(任意 — LRC / 逐字LRC / プレーンテキスト。空欄なら自動検索)
+    <textarea name="lyrics" placeholder="[00:10.00] 一行目の歌詞 …"></textarea>
+  </label>
+  <div class="row">
+    <label class="row"><input type="checkbox" name="vocaloid"> ボカロ曲(NetEase優先で歌詞検索)</label>
+    <label class="row"><input type="checkbox" name="skipSeparation"> 音源分離を省略(高速・低品質)</label>
+  </div>
+  <button id="submit" type="submit">解析を開始</button>
+</form>
+<div id="status"></div>
+
+<h2>解析済みの楽曲</h2>
+<table>
+  <thead><tr><th>タイトル</th><th>アーティスト</th><th>歌詞Tier</th><th>デバイス</th><th>JSON</th></tr></thead>
+  <tbody id="songs"><tr><td colspan="5" class="muted">読み込み中…</td></tr></tbody>
+</table>
+
+<script>
+const form = document.getElementById("form");
+const statusBox = document.getElementById("status");
+const submitBtn = document.getElementById("submit");
+
+const stageNames = {
+  fetch: "① 音源取得", separate: "② 音源分離", music_map: "③ 楽曲地図",
+  lyrics: "④ 歌詞取得", align: "⑤ タイミング按分", save: "⑥ JSON書き出し",
+};
+
+function showStatus(cls, text) {
+  statusBox.className = cls;
+  statusBox.style.display = "block";
+  statusBox.textContent = text;
+}
+
+async function refreshSongs() {
+  const songs = await (await fetch("/api/songs")).json();
+  const tbody = document.getElementById("songs");
+  if (songs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">まだありません</td></tr>';
+    return;
+  }
+  tbody.innerHTML = songs.map(s => `
+    <tr>
+      <td>${esc(s.title)}</td><td>${esc(s.artist)}</td>
+      <td>${esc(s.lyricsTier ?? "-")}</td><td>${esc(s.deviceUsed ?? "-")}</td>
+      <td><a href="/api/songs/${encodeURIComponent(s.songId)}/lyric_data.json" download>lyric_data.json</a></td>
+    </tr>`).join("");
+}
+
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+async function poll(jobId) {
+  for (;;) {
+    const job = await (await fetch(`/api/jobs/${jobId}`)).json();
+    if (job.status === "done") {
+      showStatus("done", `✅ ${job.message}`);
+      await refreshSongs();
+      return;
+    }
+    if (job.status === "error") {
+      showStatus("error", `❌ 解析に失敗しました\n${job.error}`);
+      return;
+    }
+    const stage = stageNames[job.stage] ?? job.stage ?? "待機中";
+    showStatus("running", `⏳ ${stage} — ${job.message}`);
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(form);
+  const body = {
+    source: fd.get("source"),
+    title: fd.get("title") || null,
+    artist: fd.get("artist") || null,
+    lyrics: fd.get("lyrics") || null,
+    vocaloid: fd.has("vocaloid"),
+    skipSeparation: fd.has("skipSeparation"),
+  };
+  submitBtn.disabled = true;
+  try {
+    const res = await fetch("/api/songs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showStatus("error", `❌ ${err.detail ?? res.statusText}`);
+      return;
+    }
+    const { jobId } = await res.json();
+    await poll(jobId);
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+refreshSongs();
+</script>
+</body>
+</html>

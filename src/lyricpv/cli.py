@@ -2,6 +2,7 @@
 
 使い方:
     lyricpv analyze <YouTube URL または音声ファイル> [-o 出力先] [--lyrics 歌詞ファイル]
+    lyricpv serve [--port 8000]   # WebUI (要: uv sync --extra webui)
 """
 
 from __future__ import annotations
@@ -27,11 +28,18 @@ def main(argv: list[str] | None = None) -> int:
     p_analyze.add_argument("--device", default=None, choices=["mps", "cuda", "cpu"], help="計算デバイス (既定: 自動)")
     p_analyze.add_argument("--skip-separation", action="store_true", help="音源分離を省略する (高速・低品質)")
 
+    p_serve = sub.add_parser("serve", help="WebUI (解析フロントエンド) を起動する")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8000)
+    p_serve.add_argument("--data-dir", default=None, help="解析結果ディレクトリ (既定: data/songs)")
+
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     if args.command == "analyze":
         return _cmd_analyze(args)
+    if args.command == "serve":
+        return _cmd_serve(args)
     return 2
 
 
@@ -69,6 +77,21 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    uvicorn.run("lyricpv.webui.app:app", host=args.host, port=args.port)
+    return 0
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    try:
+        import uvicorn
+    except ImportError:
+        print("WebUI には extra が必要です: uv sync --extra webui", file=sys.stderr)
+        return 1
+
+    if args.data_dir:
+        import os
+
+        os.environ["LYRICPV_DATA_DIR"] = args.data_dir
     uvicorn.run("lyricpv.webui.app:app", host=args.host, port=args.port)
     return 0
 

@@ -56,7 +56,18 @@ uv run lyricpv analyze song.wav --model htdemucs_ft --device cpu
 - `master.wav` / `vocals.wav` / `accompaniment.wav` — 解析用中間ファイル(**再配布しない**)
 - `meta.json` — 歌詞 Tier・使用デバイス・テンポ等の解析メタ
 
-### 2. ランタイム SDK で文字PVを作る(オンライン)
+### 2. WebUI から解析する(任意)
+
+ブラウザから曲の投入・進捗確認・JSON ダウンロードができる解析フロントエンドも同梱しています(描画・アニメーション機能はありません)。
+
+```bash
+uv sync --extra webui
+uv run lyricpv serve --port 8000   # → http://127.0.0.1:8000
+```
+
+YouTube URL またはサーバー上のファイルパスを入力し、歌詞(LRC/プレーン)を任意で添えて「解析を開始」。完了すると一覧から `lyric_data.json` を取得できます。
+
+### 3. ランタイム SDK で文字PVを作る(オンライン)
 
 ```html
 <audio id="audio" src="master.wav"></audio>
