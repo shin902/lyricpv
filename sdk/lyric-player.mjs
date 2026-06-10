@@ -35,6 +35,12 @@
 
 /** HTMLAudioElement を AudioAdapter に包む。 */
 export function htmlAudioAdapter(audioEl) {
+  // リスナーは 1 本だけ張り、onEnded はコールバックの差し替えにする
+  // (load() を再呼び出ししても end イベントが多重発火しない)
+  let endedCb = null;
+  audioEl.addEventListener("ended", () => {
+    if (endedCb) endedCb();
+  });
   return {
     play: () => audioEl.play(),
     pause: () => audioEl.pause(),
@@ -42,7 +48,9 @@ export function htmlAudioAdapter(audioEl) {
       audioEl.currentTime = ms / 1000;
     },
     getPositionMs: () => audioEl.currentTime * 1000,
-    onEnded: (cb) => audioEl.addEventListener("ended", cb),
+    onEnded: (cb) => {
+      endedCb = cb;
+    },
   };
 }
 
@@ -143,6 +151,7 @@ export class Player {
     this._rebuildIndex();
     if (audio.onEnded) {
       audio.onEnded(() => {
+        if (this._audio !== audio) return; // 別アダプタへ再ロード済みなら旧アダプタの通知は無視
         this._stopTicking();
         this._emit("end");
       });
@@ -268,6 +277,10 @@ export class Player {
    *   - `{ path: [phraseIdx, wordIdx], startTime?, endTime? }`   … word の補正
    *   - `{ path: [phraseIdx, wordIdx, charIdx], startTime?, endTime? }` … char の補正
    *   - `{ segment: segIdx, startTime?, endTime? }`              … segment 境界の補正
+   *
+   * 適用後は phrases / segments が startTime 昇順に再ソートされる。
+   * 順序が入れ替わる上書きをした場合、以降の path のインデックスは
+   * ソート後の `player.data` を参照して指定すること。
    */
   applyOverrides(overrides) {
     this._requireLoaded();
@@ -311,6 +324,12 @@ export class Player {
   // ----- 内部 -----------------------------------------------------------
 
   _rebuildIndex() {
+    // currentPhrase / findChorus 等は startTime 昇順前提の二分探索なので、
+    // 上書きで順序が入れ替わった phrases / segments も再ソートする
+    this._data.phrases.sort((a, b) => a.startTime - b.startTime);
+    if (Array.isArray(this._data.segments)) {
+      this._data.segments.sort((a, b) => a.startTime - b.startTime);
+    }
     const words = [];
     const chars = [];
     for (const p of this._data.phrases) {
