@@ -44,8 +44,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
-    from .fetch import check_external_tools, extract_youtube_id, is_url
+    from .fetch import FetchError, check_external_tools, extract_youtube_id, is_url
     from .pipeline import PipelineOptions, run
+    from .separate import SeparationError
 
     missing = check_external_tools()
     if missing:
@@ -79,7 +80,11 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     def progress(stage: str, message: str) -> None:
         print(f"  [{stage}] {message}", file=sys.stderr)
 
-    result = run(args.source, out_dir, options=options, progress=progress)
+    try:
+        result = run(args.source, out_dir, options=options, progress=progress)
+    except (FetchError, SeparationError) as e:
+        print(f"エラー: {e}", file=sys.stderr)
+        return 1
     print(f"完了: {result.json_path} (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})")
     return 0
 
