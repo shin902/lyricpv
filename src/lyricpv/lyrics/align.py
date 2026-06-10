@@ -54,6 +54,9 @@ def _align_line_synced(lines: list[LyricLine], duration_ms: int) -> list[Phrase]
             continue
         total_mora = sum(m.mora_count for m in morphs)
         cap = start + total_mora * _MAX_MS_PER_MORA + _LINE_TAIL_MARGIN_MS
+        # 最低表示時間 200ms を確保するための下限。次行が 200ms 未満の間隔で
+        # 始まる場合、この行の end が次行の start を超えて重なることがあるが、
+        # 実害は小さく (validate() も startTime 昇順のみ検証) 許容している。
         end = max(start + 200, min(next_start, cap, duration_ms))
         phrases.append(_build_phrase(line.text, morphs, start, end))
     return phrases
