@@ -63,12 +63,12 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     # source 省略時は対話モードとみなす。
     interactive = args.interactive or args.source is None
     if interactive and not sys.stdin.isatty():
-        print("対話モードには端末 (TTY) が必要です。--title/--artist/--lyrics で指定してください。", file=sys.stderr)
+        print("対話モードには端末 (TTY) が必要です。source を指定し -i を外して実行してください。", file=sys.stderr)
         return 1
 
     source = args.source
     if source is None:
-        source = input("YouTube URL または音声ファイルのパス: ").strip()
+        source = _prompt("YouTube URL または音声ファイルのパス")
         if not source:
             print("ソースが指定されていません。", file=sys.stderr)
             return 1
