@@ -7,7 +7,7 @@
 
 import json
 
-from lyricpv.pipeline import PipelineOptions, run
+from lyricpv.pipeline import LyricsDecision, PipelineOptions, run
 from lyricpv.schema import LyricData
 
 LRC = """[00:01.00] 夜に駆ける
@@ -89,3 +89,88 @@ def test_pipeline_without_lyrics_yields_empty_phrases(synth_wav_path, tmp_path, 
     assert result.lyrics_tier == "T4"
     assert result.data.phrases == []
     assert result.data.beats  # 楽曲地図のみの JSON になる
+
+
+def test_on_metadata_overrides_title_artist(synth_wav_path, tmp_path):
+    # 取得後の確認コールバックで title/artist を差し替えられる
+    def on_metadata(title, artist):
+        return "Remember", "yuigot"
+
+    result = run(
+        str(synth_wav_path),
+        tmp_path / "out",
+        options=PipelineOptions(
+            title="装飾だらけのタイトル", artist="チャンネル名", lyrics_text=LRC,
+            skip_separation=True,
+        ),
+        on_metadata=on_metadata,
+    )
+    assert result.data.song.title == "Remember"
+    assert result.data.song.artist == "yuigot"
+
+
+def test_lyrics_review_retry_then_accept(synth_wav_path, tmp_path, monkeypatch):
+    # 最初の title では歌詞が見つからず、再検索で title を直すとヒットする状況を再現
+    import lyricpv.pipeline as pipeline_mod
+
+    def fake_fetch(title, artist, *, vocaloid=False):
+        if title == "Remember":
+            return "[00:01.00] 見つかった歌詞\n", "T2"
+        return None, "T4"
+
+    monkeypatch.setattr(pipeline_mod, "fetch_lyrics", fake_fetch)
+
+    seen = []
+
+    def on_review(title, artist, lines, tier):
+        seen.append((title, tier))
+        if tier == "T4":
+            return LyricsDecision("retry", "Remember", "yuigot")
+        return LyricsDecision("accept", title, artist)
+
+    result = run(
+        str(synth_wav_path),
+        tmp_path / "out",
+        options=PipelineOptions(title="装飾タイトル", skip_separation=True),
+        on_lyrics_review=on_review,
+    )
+
+    # 1 回目 T4 → 再検索 → 2 回目 T2 で採用
+    assert [tier for _, tier in seen] == ["T4", "T2"]
+    assert result.lyrics_tier == "T2"
+    # 再検索で直した title/artist が曲メタに反映される
+    assert result.data.song.title == "Remember"
+    assert result.data.song.artist == "yuigot"
+    assert result.data.phrases and result.data.phrases[0].text == "見つかった歌詞"
+
+
+def test_lyrics_review_skip_yields_t4(synth_wav_path, tmp_path, monkeypatch):
+    # レビューで「歌詞なしで続行」を選ぶと T4 (フレーズ空) になる
+    import lyricpv.pipeline as pipeline_mod
+
+    monkeypatch.setattr(
+        pipeline_mod, "fetch_lyrics", lambda *a, **k: ("[00:01.00] 不要\n", "T2")
+    )
+
+    result = run(
+        str(synth_wav_path),
+        tmp_path / "out",
+        options=PipelineOptions(skip_separation=True),
+        on_lyrics_review=lambda *a: LyricsDecision("skip", a[0], a[1]),
+    )
+    assert result.lyrics_tier == "T4"
+    assert result.data.phrases == []
+
+
+def test_lyrics_review_skipped_for_user_supplied_lyrics(synth_wav_path, tmp_path):
+    # ユーザー供給歌詞があるときはレビューコールバックを呼ばない
+    def on_review(*args):
+        raise AssertionError("ユーザー供給歌詞ではレビューを呼ばないこと")
+
+    result = run(
+        str(synth_wav_path),
+        tmp_path / "out",
+        options=PipelineOptions(lyrics_text=LRC, skip_separation=True),
+        on_lyrics_review=on_review,
+    )
+    assert result.lyrics_tier == "T2"
