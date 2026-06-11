@@ -113,16 +113,18 @@ def _align_plain(
     """
     span_start, span_end = _vocal_active_span(duration_ms, amplitude)
 
-    morphs_per_line = [analyze_line(ln.text) for ln in lines]
-    weights = [max(1, sum(m.mora_count for m in ms)) for ms in morphs_per_line]
+    # 形態素が空の行 (記号のみ等) は按分対象から除外する。weights に残すと
+    # その分のスパンが割り当て先のないまま隙間として残ってしまう。
+    entries = [(ln, ms) for ln in lines if (ms := analyze_line(ln.text))]
+    if not entries:
+        return []
+    weights = [max(1, sum(m.mora_count for m in ms)) for _, ms in entries]
     total = sum(weights)
     span = span_end - span_start
 
     phrases: list[Phrase] = []
     cursor = span_start
-    for line, morphs, w in zip(lines, morphs_per_line, weights):
-        if not morphs:
-            continue
+    for (line, morphs), w in zip(entries, weights):
         line_span = span * w / total
         sing_ms = max(200, int(line_span * 0.85))  # 残り 15% は行間の息継ぎ
         phrases.append(_build_phrase(line.text, morphs, int(cursor), int(cursor) + sing_ms))
