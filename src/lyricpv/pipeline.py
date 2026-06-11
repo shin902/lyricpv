@@ -18,7 +18,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NamedTuple
 
 from . import music_map
 from .fetch import FetchResult, fetch_youtube, import_file, is_url
@@ -34,6 +34,29 @@ LYRIC_DATA_FILENAME = "lyric_data.json"
 META_FILENAME = "meta.json"
 
 ProgressCallback = Callable[[str, str], None]
+
+# 取得後に自動検出した (title, artist) を受け取り、上書き後の (title, artist) を返す。
+# CLI の対話モードでユーザーに確認・修正させるために使う。
+MetadataCallback = Callable[[str, str], "tuple[str, str]"]
+
+
+class LyricsDecision(NamedTuple):
+    """歌詞検索結果のレビュー判定。
+
+    - action="accept": この歌詞を採用する
+    - action="skip":   歌詞なし (T4) で続行する
+    - action="retry":  title/artist を差し替えて再検索する
+    """
+
+    action: str  # "accept" | "skip" | "retry"
+    title: str
+    artist: str
+
+
+# 検索した (title, artist, 行, tier) を受け取り、採用/スキップ/再検索を返す。
+LyricsReviewCallback = Callable[
+    [str, str, "list[LyricLine]", str], LyricsDecision
+]
 
 
 @dataclass
@@ -63,6 +86,8 @@ def run(
     *,
     options: PipelineOptions | None = None,
     progress: ProgressCallback | None = None,
+    on_metadata: MetadataCallback | None = None,
+    on_lyrics_review: LyricsReviewCallback | None = None,
 ) -> PipelineResult:
     """1 曲分のフル解析を実行する。
 
@@ -71,6 +96,10 @@ def run(
         out_dir: 解析結果の出力ディレクトリ。
         options: 解析オプション。
         progress: ``(stage, message)`` を受け取る進捗コールバック。
+        on_metadata: 取得後に ``(title, artist)`` を受け取り上書き後の値を返す
+            コールバック。CLI 対話モードでの確認・修正に使う (既定 None=確認なし)。
+        on_lyrics_review: 歌詞検索結果をレビューして採用/スキップ/再検索を決める
+            コールバック (既定 None=最初の検索結果をそのまま採用)。
     """
     options = options or PipelineOptions()
     out_dir = Path(out_dir)
@@ -87,7 +116,21 @@ def run(
     title = options.title or fetched.title
     artist = options.artist or fetched.artist
 
-    # ② 分離 (MPS)
+    # ①' メタ情報の対話確認 (任意)
+    # YouTube の title/artist は装飾やチャンネル名混入で歌詞検索を外しやすいため、
+    # 重い分離処理に入る前にここで確認・修正できるようにする。
+    if on_metadata is not None:
+        title, artist = on_metadata(title, artist)
+
+    # ② 歌詞取得 (対話レビューがあれば確認・再検索ループ)
+    # 分離より先に解決することで、対話を前半に集約しユーザーが以降を放置できる。
+    report("lyrics", "歌詞を取得しています")
+    lines, tier, title, artist = _resolve_lyrics(
+        title, artist, options, on_lyrics_review, report
+    )
+    report("lyrics", f"歌詞 Tier: {tier}")
+
+    # ③ 分離 (MPS)
     vocals_path = None
     device_used = "none"
     if not options.skip_separation:
@@ -102,14 +145,9 @@ def run(
         device_used = sep.device_used
         report("separate", f"分離完了 (デバイス: {device_used})")
 
-    # ③ 楽曲地図
+    # ④ 楽曲地図
     report("music_map", "ビート・構造・コード・声量を解析しています")
     mm = music_map.analyze(fetched.wav_path, vocals_path)
-
-    # ④ 歌詞取得
-    report("lyrics", "歌詞を取得しています")
-    lines, tier = _get_lyrics(title, artist, options)
-    report("lyrics", f"歌詞 Tier: {tier}")
 
     # ⑤ 整合 (モーラ按分)
     report("align", "歌詞タイミングを按分しています")
@@ -163,6 +201,36 @@ def _fetch(source: str, out_dir: Path, options: PipelineOptions) -> FetchResult:
     if is_url(source):
         return fetch_youtube(source, out_dir)
     return import_file(source, out_dir, title=options.title, artist=options.artist)
+
+
+def _resolve_lyrics(
+    title: str,
+    artist: str,
+    options: PipelineOptions,
+    on_review: LyricsReviewCallback | None,
+    report: ProgressCallback,
+) -> tuple[list[LyricLine], str, str, str]:
+    """歌詞を解決し ``(行, tier, title, artist)`` を返す。
+
+    ``on_review`` があり、かつユーザー供給歌詞でない場合は、検索結果を
+    レビューさせ「再検索」なら title/artist を差し替えて検索し直す。
+    再検索で title/artist が変わると曲メタにも反映するため、確定値も返す。
+    """
+    # ユーザー供給歌詞は検索しないのでレビューループ対象外
+    if options.lyrics_text or on_review is None:
+        lines, tier = _get_lyrics(title, artist, options)
+        return lines, tier, title, artist
+
+    while True:
+        lines, tier = _get_lyrics(title, artist, options)
+        decision = on_review(title, artist, lines, tier)
+        if decision.action == "retry":
+            title, artist = decision.title, decision.artist
+            report("lyrics", f"歌詞を再検索しています ({title} / {artist})")
+            continue
+        if decision.action == "skip":
+            return [], "T4", title, artist
+        return lines, tier, title, artist
 
 
 def _get_lyrics(

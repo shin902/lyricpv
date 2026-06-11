@@ -48,6 +48,12 @@ uv run lyricpv analyze "https://..." --vocaloid
 
 # 高品質分離(約4倍遅い) / デバイス強制
 uv run lyricpv analyze song.wav --model htdemucs_ft --device cpu
+
+# 対話モード(YouTube の装飾タイトル/チャンネル名で歌詞検索が外れるとき)
+#   ・取得後に title/artist を確認・修正してから検索
+#   ・ヒットした歌詞の冒頭を表示し、違えば打ち直して再検索 (Y/n/r)
+uv run lyricpv analyze -i "https://www.youtube.com/watch?v=XXXX"
+uv run lyricpv analyze            # source も省略すると URL から対話入力
 ```
 
 出力(`data/songs/<名前>/`):
