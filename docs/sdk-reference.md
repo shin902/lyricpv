@@ -15,7 +15,7 @@ const player = new Player({ tickIntervalMs: 16 }); // 省略可
 
 | メソッド | 説明 |
 |---|---|
-| `await load(json, audio)` | 契約A JSON と音源アダプタを読み込む。完了で `ready` 発火 |
+| `await load(json, audio)` | 契約A JSON と音源アダプタを読み込む。完了で `ready` 発火。渡した `json` は変更されない (Player が専有コピーを保持する)。再生中に呼ぶと旧音源を停止し、tick も引き継がれない |
 | `on(event, cb)` / `off(event, cb)` | イベント購読。`"ready" \| "timeupdate" \| "play" \| "pause" \| "end"` |
 | `play()` / `pause()` | 再生制御。再生中は `tickIntervalMs` ごとに `timeupdate(positionMs)` が発火 |
 | `seek(ms)` | 解析データ時間軸での移動(offsetMs 補正は内部で処理) |
