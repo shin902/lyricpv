@@ -42,12 +42,17 @@ class Job:
             }
 
 
+# song_id として許容する文字クラス。\w は Unicode モードで漢字・かなを含むが、
+# 対象範囲を明示するため日本語の文字クラスも併記する (々・〆 等の範囲外の記号は
+# slugify() により _ に置換される)。webui/app.py の _SONG_ID_RE もこの定数を
+# 使い、slugify() の出力形式と検証パターンが乖離しないようにする。
+SONG_ID_CHARS = r"\w\-ぁ-んァ-ヶ一-龠ー"
+
+
 def slugify(text: str) -> str:
     """タイトル等から出力ディレクトリ名を作る。"""
     text = unicodedata.normalize("NFKC", text).strip()
-    # \w は Unicode モードで漢字・かなを含むが、対象範囲を明示するため日本語の
-    # 文字クラスも併記する (々・〆 等の範囲外の記号は _ に置換される)
-    text = re.sub(r"[^\w\-ぁ-んァ-ヶ一-龠ー]+", "_", text)
+    text = re.sub(rf"[^{SONG_ID_CHARS}]+", "_", text)
     return text.strip("_")[:60] or "song"
 
 
@@ -77,6 +82,9 @@ class JobManager:
         """完了/失敗ジョブを古い順に間引き、保持件数を MAX_JOBS 以下に保つ。
 
         呼び出し側で self._lock を保持していること。
+        pending/running のジョブは間引かないため、それらだけで MAX_JOBS を
+        超えて滞留している間は一時的に上限を超えうる
+        (ローカルツール用途の同時実行数を想定した設計)。
         """
         if len(self._jobs) <= self.MAX_JOBS:
             return
