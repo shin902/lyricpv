@@ -159,6 +159,55 @@ def test_apply_char_times_caps_silence_absorbed_last_char():
     assert p.end_time == last.end_time
 
 
+def test_apply_char_times_ignores_squashed_final_char():
+    """弱く歌われた行末の文字 (「〜だろう」の「う」等) は 1 フレームに潰れた
+    実測 (score~0) で返るため採らず、直前の確定点の直後に置く (#3)。"""
+    p = make_phrase(["だろう"], 10_000, 14_000)
+    aligned = [
+        AlignedChar("だ", 10_100, 10_400, score=0.9),
+        AlignedChar("ろ", 10_400, 11_000, score=0.9),
+        AlignedChar("う", 11_000, 11_020, score=0.0),  # 1 フレームの潰れ
+    ]
+    assert _apply_char_times(p, aligned)
+    u = flat_chars(p)[-1]
+    assert u.char == "う"
+    assert u.start_time == 11_000  # 「ろ」の実測終了に隣接
+    assert u.end_time <= 11_000 + _TYPICAL_CHAR_MS
+
+
+def test_apply_char_times_ignores_low_score_chars():
+    """スコアの低い実測 (CTC の自信がない文字) は採らず補間に回す。"""
+    p = make_phrase(["夜", "に", "駆ける"], 10_000, 12_000)
+    aligned = [
+        AlignedChar("夜", 10_100, 10_300, score=0.9),
+        AlignedChar("に", 10_350, 10_500, score=0.1),  # 低スコアの潰れ
+        AlignedChar("駆", 10_800, 11_000, score=0.9),
+        AlignedChar("け", 11_000, 11_200, score=0.9),
+        AlignedChar("る", 11_300, 11_600, score=0.9),
+    ]
+    assert _apply_char_times(p, aligned)
+    ni = flat_chars(p)[1]
+    assert ni.char == "に"
+    # 実測 (10_350) ではなく前後の確定点の間に補間される
+    assert 10_300 <= ni.start_time <= ni.end_time <= 10_800
+
+
+def test_apply_char_times_rejects_collapsed_path():
+    """行中間に潰れ実測が複数ある行は CTC パスの崩壊とみなして棄却する
+    (実データで文字が数十 ms 間隔で流れる行を観測 #3)。"""
+    p = make_phrase(["夜", "に", "駆ける"], 10_000, 12_000)
+    before = [(c.start_time, c.end_time) for c in flat_chars(p)]
+    aligned = [
+        AlignedChar("夜", 10_100, 10_300, score=0.9),
+        AlignedChar("に", 10_300, 10_320, score=0.0),  # 潰れ (中間)
+        AlignedChar("駆", 10_320, 10_340, score=0.0),  # 潰れ (中間)
+        AlignedChar("け", 10_340, 10_400, score=0.66),
+        AlignedChar("る", 10_400, 10_700, score=0.9),
+    ]
+    assert not _apply_char_times(p, aligned)
+    assert [(c.start_time, c.end_time) for c in flat_chars(p)] == before
+
+
 def test_clamp_tail_removes_start_time_inversions():
     """前の行の末尾文字が次の行の頭を追い越したら切り詰める (SDK の二分探索対策)。"""
     prev = make_phrase(["はい", "）"], 10_000, 13_000)
@@ -180,6 +229,7 @@ class _FakeWhisperx:
     def __init__(self):
         self.align_calls: list[dict] = []
         self.loaded: list[tuple] = []
+        self.span_ratio = 1.0  # 歌唱が窓のどこまでで終わるかを変えるテスト用つまみ
 
     def load_audio(self, path):
         self.audio_path = path
@@ -198,6 +248,7 @@ class _FakeWhisperx:
             text = seg["text"]
             margin = 0.05
             start, end = seg["start"] + margin, seg["end"] - margin
+            end = start + (end - start) * self.span_ratio
             step = (end - start) / max(1, len(text))
             chars = []
             for i, ch in enumerate(text):
@@ -242,6 +293,20 @@ def test_refine_phrases_updates_times_and_reports_counts(fake_whisperx, tmp_path
     assert phrases[0].start_time >= 600
     # フレーズの開始順は保たれる (契約A の検証条件)
     assert phrases[0].start_time <= phrases[1].start_time
+
+
+def test_refine_phrases_extends_tail_to_original_end(fake_whisperx, tmp_path):
+    """行末は実測の歌い終わりで切らず、補正前の行末 (T2 では次行頭) まで
+    余韻として残す (表示が次のフレーズまで消えない #3)。"""
+    fake_whisperx.span_ratio = 0.5  # 歌唱が行窓の前半で終わる音源を模す
+    p = make_phrase(["夜", "に", "駆ける"], 1_000, 3_000)
+    result = refine_phrases([p], tmp_path / "vocals.wav", pad_ms=400)
+
+    assert result.refined_count == 1
+    assert p.start_time != 1_000  # 開始は実測で補正される
+    assert p.end_time == 3_000  # 行末は補正前の値まで伸びる
+    assert p.words[-1].end_time == 3_000
+    assert flat_chars(p)[-1].end_time == 3_000
 
 
 def test_refine_phrases_empty_is_noop(fake_whisperx, tmp_path):

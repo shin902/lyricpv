@@ -9,6 +9,7 @@ whisperx の日本語 CTC アラインメント (wav2vec2) を分離ボーカル
 
 - 行 (フレーズ) の窓は既存値 (LRC または按分) を信頼して探索範囲にする
 - 認識できなかった行・文字は按分値のまま残す (全置換ではなく上書き補正)
+- 行末は補正前の行末まで余韻として伸ばす (表示が次行まで残る按分の挙動を踏襲)
 - モデルのダウンロードと推論が重いため既定 OFF (CLI の --refine-align)
 
 依存は任意 extra: ``uv sync --extra refine``
@@ -47,6 +48,21 @@ _EDGE_EPS_MS = 30
 # 残したいので 0 にはせず、無音吸収だけを切り詰める
 _MAX_LAST_CHAR_MS = 2000
 
+# wav2vec2 (16kHz / stride 320) の 1 フレーム長。実測がこれ以下の文字は、
+# CTC が音声上の居場所を見つけられないまま出力だけ強制された「潰れ」
+# (弱く歌われた「〜だろう」の「う」や、縮退パスの中間文字) なので採らない
+_ONE_FRAME_MS = 25
+
+# whisperx の文字スコアがこれ未満の実測も潰れとみなす。実データ (Reply 38 行)
+# では正当な実測は score>=0.46、潰れは 0.0〜0.07 に分布し明確に分離する
+# (0.35〜0.75 の中間帯には正当な文字が多いため、これ以上は上げない)
+_MIN_CHAR_SCORE = 0.35
+
+# 行中間 (行末の文字を除く) で許容する潰れ実測の数。これを超える行は CTC
+# パスが途中で崩壊している (実データ: 正常行は最大 1、文字が数十 ms 間隔で
+# 流れる縮退行は 2〜3) とみなし、行ごと棄却して按分値のまま残す
+_MAX_SQUASHED_MID_CHARS = 1
+
 
 class RefineError(RuntimeError):
     """強制アラインメント補正に失敗したときに送出される。"""
@@ -59,6 +75,7 @@ class AlignedChar:
     char: str
     start_ms: int
     end_ms: int
+    score: float | None = None
 
 
 @dataclass
@@ -113,7 +130,9 @@ def refine_phrases(
     for phrase, seg in zip(phrases, aligned_segments):
         chars = _parse_chars(seg)
         window_start = max(0, phrase.start_time - pad_ms)
+        orig_end = phrase.end_time
         if _apply_char_times(phrase, chars, min_start=prev_start, window_start=window_start):
+            _extend_tail(phrase, orig_end)
             refined += 1
         # 前の行の末尾文字 (補間された括弧等) がこの行の頭を追い越すと、
         # SDK の二分探索の前提 (flat 配列が時刻昇順) が壊れるため切り詰める
@@ -145,9 +164,21 @@ def _parse_chars(segment: dict) -> list[AlignedChar]:
         if start is None or end is None:
             continue
         chars.append(
-            AlignedChar(char=c.get("char", ""), start_ms=int(start * 1000), end_ms=int(end * 1000))
+            AlignedChar(
+                char=c.get("char", ""),
+                start_ms=int(start * 1000),
+                end_ms=int(end * 1000),
+                score=c.get("score"),
+            )
         )
     return chars
+
+
+def _is_squashed(a: AlignedChar) -> bool:
+    """CTC が音声上の居場所を見つけられないまま潰した実測かどうか。"""
+    if a.end_ms - a.start_ms <= _ONE_FRAME_MS:
+        return True
+    return a.score is not None and a.score < _MIN_CHAR_SCORE
 
 
 def _apply_char_times(
@@ -173,13 +204,17 @@ def _apply_char_times(
     # 先頭からの単調マッチ (CTC の出力は時間順なので前方探索のみで足りる)。
     # 認識されなかった文字があっても探索位置 j は進めず、後続のマッチを保つ。
     # 句読点・記号 (歌われない文字) は whisperx が補間時刻を付けて返すことが
-    # あるが信用できないため実測としては採らず、後段の補間ルールで配置する
+    # あるが信用できないため実測としては採らず、後段の補間ルールで配置する。
+    # 潰れ実測 (_is_squashed) も同様に採らないが、パス上の位置は消費する
     times: list[tuple[int, int] | None] = [None] * len(flat)
-    n_sung = sum(1 for c in flat if c.char.isalnum())
+    sung_idx = [i for i, c in enumerate(flat) if c.char.isalnum()]
+    n_sung = len(sung_idx)
     if n_sung == 0:
         return False
+    last_sung = sung_idx[-1]
     j = 0
     matched = 0
+    squashed_mid = 0
     for i, c in enumerate(flat):
         if not c.char.isalnum():
             continue
@@ -187,10 +222,19 @@ def _apply_char_times(
         while k < len(aligned) and aligned[k].char != c.char:
             k += 1
         if k < len(aligned):
-            times[i] = (aligned[k].start_ms, aligned[k].end_ms)
-            matched += 1
+            a = aligned[k]
             j = k + 1
+            if _is_squashed(a):
+                if i != last_sung:
+                    squashed_mid += 1
+                continue
+            times[i] = (a.start_ms, a.end_ms)
+            matched += 1
 
+    # 行中間の潰れが多い行は CTC パスの崩壊 (一部の文字を数十 ms 間隔で
+    # 埋めただけの状態)。残った実測も信用できないため行ごと棄却する
+    if squashed_mid > _MAX_SQUASHED_MID_CHARS:
+        return False
     if matched < max(1, int(n_sung * _MIN_MATCH_RATIO)):
         return False
 
@@ -257,12 +301,29 @@ def _fill_gaps(times: list[tuple[int, int] | None]) -> list[tuple[int, int]]:
     return result  # type: ignore[return-value]
 
 
+def _extend_tail(phrase: Phrase, orig_end: int) -> None:
+    """実測で縮んだ行末を、補正前の行末 (T2 では次行の頭) まで余韻として伸ばす。
+
+    SDK の currentChar/currentPhrase は endTime を過ぎると null を返すため、
+    行末を実測の歌い終わりちょうどで切ると、次の行まで歌詞が消えて
+    「ぶっつり切れた」表示になる。按分は行末文字の end を行窓の端まで
+    伸ばしており、その表示挙動を踏襲する。開始時刻には触れない。
+    """
+    if orig_end <= phrase.end_time:
+        return
+    last_word = phrase.words[-1]
+    if last_word.chars:
+        last_word.chars[-1].end_time = orig_end
+    last_word.end_time = orig_end
+    phrase.end_time = orig_end
+
+
 def _clamp_tail(prev_phrase: Phrase, cur_start: int) -> None:
     """前の行のうち cur_start を追い越した文字・単語の開始時刻を切り詰める。
 
-    契約A の利用側 (SDK) は全フレーズをフラット化した char/word 配列を
-    開始時刻の昇順とみなして二分探索するため、行間の重なりは許しても
-    開始時刻の逆行は作らない。
+    SDK は flat 配列を読み込み時に startTime で再ソートするため逆行で壊れは
+    しないが、前の行の補間文字 (括弧等) が次の行の途中に「現在の文字」として
+    割り込むと表示がちらつく。開始時刻を次行の頭に揃えて割り込みを防ぐ。
     """
     for w in prev_phrase.words:
         for c in w.chars:
