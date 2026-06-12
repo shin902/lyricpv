@@ -53,6 +53,10 @@ uv run lyricpv analyze song.wav --model htdemucs_ft --device cpu
 # (重い処理のため既定 OFF。要: uv sync --extra enhance)
 uv run lyricpv analyze song.wav --enhance-vocals
 
+# 強制アラインメント: 行内の文字タイミングを音声から実測して補正(サビずれ対策の本命)
+# (重い処理のため既定 OFF。要: uv sync --extra refine。--enhance-vocals と併用可)
+uv run lyricpv analyze song.wav --refine-align
+
 # 対話モード(YouTube の装飾タイトル/チャンネル名で歌詞検索が外れるとき)
 #   ・取得後に title/artist を確認・修正してから検索
 #   ・ヒットした歌詞の冒頭を表示し、違えば打ち直して再検索 (Y/n/r)

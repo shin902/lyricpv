@@ -26,6 +26,7 @@ from .fetch import FetchResult, fetch_youtube, import_file, is_url
 from .lyrics.align import align
 from .lyrics.fetch import fetch_lyrics
 from .lyrics.lrc import LyricLine, is_word_synced, parse_lrc
+from .refine import refine_phrases
 from .schema import LyricData, SongMeta, SongSource
 from .separate import separate
 
@@ -72,6 +73,9 @@ class PipelineOptions:
     # 分離ボーカルにハモリ除去・残響除去を掛ける (#3)。重い処理かつ
     # audio-separator (extra: enhance) が必要なため既定 OFF
     enhance_vocals: bool = False
+    # 強制アラインメント (whisperx) で word/char 時刻を実測値に補正する (#3, #6)。
+    # モデル DL と推論が重く whisperx (extra: refine) が必要なため既定 OFF
+    refine_align: bool = False
 
 
 @dataclass
@@ -170,6 +174,21 @@ def run(
     report("align", "歌詞タイミングを按分しています")
     phrases = align(lines, fetched.duration_ms, mm.vocal_activity or mm.amplitude)
 
+    # ⑤' 強制アラインメント補正 (opt-in): 行内の按分時刻を CTC の実測値に置き換える
+    refine_model = None
+    refined_phrases = 0
+    if options.refine_align:
+        if vocals_path is None:
+            report("refine", "分離ボーカルが無いため強制アラインメントをスキップします")
+        elif not phrases:
+            report("refine", "歌詞が無いため強制アラインメントをスキップします")
+        else:
+            report("refine", "強制アラインメント (whisperx) で時刻を補正しています")
+            rr = refine_phrases(phrases, vocals_path, device=options.device)
+            refine_model = rr.model
+            refined_phrases = rr.refined_count
+            report("refine", f"補正完了 ({rr.refined_count}/{rr.total} 行)")
+
     # ⑥ 契約A JSON へ規格化
     report("save", "TextAlive 互換 JSON を書き出しています")
     data = LyricData(
@@ -200,6 +219,8 @@ def run(
         "tempoBpm": round(mm.tempo_bpm, 1),
         "separationModel": None if options.skip_separation else options.separation_model,
         "enhanceModels": enhance_models or None,
+        "refineModel": refine_model,
+        "refinedPhrases": refined_phrases or None,
     }
     (out_dir / META_FILENAME).write_text(
         json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8"

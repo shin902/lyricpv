@@ -38,6 +38,10 @@ def main(argv: list[str] | None = None) -> int:
         "--enhance-vocals", action="store_true",
         help="分離ボーカルにハモリ・残響除去を掛ける (要: uv sync --extra enhance)",
     )
+    p_analyze.add_argument(
+        "--refine-align", action="store_true",
+        help="強制アラインメントで word/char 時刻を実測値に補正する (要: uv sync --extra refine)",
+    )
 
     p_serve = sub.add_parser("serve", help="WebUI (解析フロントエンド) を起動する")
     p_serve.add_argument("--host", default="127.0.0.1")
@@ -58,6 +62,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     from .enhance import EnhanceError
     from .fetch import FetchError, check_external_tools, extract_youtube_id, is_url
     from .pipeline import PipelineOptions, run
+    from .refine import RefineError
     from .separate import SeparationError
 
     missing = check_external_tools()
@@ -101,6 +106,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         device=args.device,
         skip_separation=args.skip_separation,
         enhance_vocals=args.enhance_vocals,
+        refine_align=args.refine_align,
     )
 
     def progress(stage: str, message: str) -> None:
@@ -121,7 +127,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             on_metadata=on_metadata,
             on_lyrics_review=on_lyrics_review,
         )
-    except (FetchError, SeparationError, EnhanceError) as e:
+    except (FetchError, SeparationError, EnhanceError, RefineError) as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
     print(f"完了: {result.json_path} (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})")
