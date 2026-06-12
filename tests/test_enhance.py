@@ -43,10 +43,12 @@ class FakeSeparator:
 
         out_dir = Path(self.kwargs["output_dir"])
         stem = Path(input_path).stem
+        # 実物の命名 ({入力名}_({ステム})_{モデル}.wav) に合わせ、目的でない
+        # ステムを先に並べる (順序依存の誤選択をリグレッションとして検出する)
         if "karaoke" in self.loaded_models[-1]:
-            names = [f"{stem}_(Vocals).wav", f"{stem}_(Instrumental).wav"]
+            names = [f"{stem}_(Instrumental)_km.wav", f"{stem}_(Vocals)_km.wav"]
         else:
-            names = [f"{stem}_(Dry).wav", f"{stem}_(Echo).wav"]
+            names = [f"{stem}_(Reverb)_dm.wav", f"{stem}_(No Reverb)_dm.wav"]
         for name in names:
             # 中身は入力のコピー (パイプラインテストで librosa が読めるように)
             shutil.copyfile(input_path, out_dir / name)
@@ -118,6 +120,22 @@ def test_pick_stem_prefers_keyword_then_falls_back(tmp_path):
     # 複数候補から特定できなければ明確なエラー
     with pytest.raises(EnhanceError, match="特定できません"):
         _pick_stem(["a.wav", "b.wav"], ("vocals",), tmp_path, "m")
+
+
+def test_pick_stem_ignores_input_filename_contamination(tmp_path):
+    """入力が vocals.wav のため全出力名に 'vocals' が含まれても、
+    括弧ラベルの (Vocals) を持つ方だけを選ぶ (#3 の off-vocal 誤選択)。"""
+    outputs = [
+        "vocals_(Instrumental)_mel_band_roformer_karaoke.wav",
+        "vocals_(Vocals)_mel_band_roformer_karaoke.wav",
+    ]
+    picked = _pick_stem(outputs, ("vocals",), tmp_path, "m")
+    assert "(Vocals)" in picked.name
+
+    # ステム名の空白・大小文字の揺れ ((No Reverb) 等) も正規化して一致させる
+    outputs2 = ["x_(Reverb)_dm.wav", "x_(No Reverb)_dm.wav"]
+    picked2 = _pick_stem(outputs2, ("noreverb", "dry"), tmp_path, "m")
+    assert "(No Reverb)" in picked2.name
 
 
 def test_pipeline_records_enhance_models_in_meta(fake_audio_separator, tmp_path, synth_wav_path, monkeypatch):

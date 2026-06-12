@@ -17,6 +17,7 @@ Demucs の vocals ステムにはハモリ(コーラス)と残響(エコー)が�
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,10 +31,11 @@ DEFAULT_DEREVERB_MODEL = "dereverb-echo_mel_band_roformer_sdr_13.4843_v2.ckpt"
 
 ENHANCED_FILENAME = "vocals_enhanced.wav"
 
-# 各段で採用するステムをファイル名 (小文字) のキーワードで選ぶ。
+# 各段で採用するステムを、出力ファイル名の括弧ラベル ((Vocals) 等) で選ぶ。
 # モデルによってステム名が異なる (Vocals / Dry / No Reverb 等) ため複数候補を持つ。
-_KARAOKE_STEM_KEYWORDS = ("vocals",)
-_DEREVERB_STEM_KEYWORDS = ("dry", "noreverb", "no reverb", "noecho", "no echo")
+# ラベルは _stem_labels で正規化 (小文字化・空白/記号除去) して完全一致で比較する
+_KARAOKE_STEM_KEYWORDS = ("vocals", "leadvocals")
+_DEREVERB_STEM_KEYWORDS = ("noreverb", "dry", "noecho")
 
 
 class EnhanceError(RuntimeError):
@@ -111,13 +113,19 @@ def _import_separator():
 
 
 def _pick_stem(outputs: list[str], keywords: tuple[str, ...], work_dir: Path, model: str) -> Path:
-    """分離結果のファイル群から目的のステムをファイル名キーワードで選ぶ。"""
+    """分離結果のファイル群から目的のステムを括弧ラベルで選ぶ。
+
+    audio-separator の出力名は ``{入力名}_({ステム名})_{モデル名}.wav`` 形式で、
+    入力名 (vocals.wav) が先頭に引き継がれる。名前全体の部分一致だと
+    ``vocals_(Instrumental)_...`` を「vocals を含む」と誤選択して off-vocal を
+    掴んでしまうため、括弧内のステムラベルだけを完全一致で比較する。
+    """
     paths = [Path(o) if Path(o).is_absolute() else work_dir / o for o in outputs]
     if not paths:
         raise EnhanceError(f"モデル {model} が出力を生成しませんでした")
     for kw in keywords:
         for p in paths:
-            if kw in p.name.lower():
+            if kw in _stem_labels(p.name):
                 return p
     if len(paths) == 1:
         return paths[0]
@@ -125,3 +133,8 @@ def _pick_stem(outputs: list[str], keywords: tuple[str, ...], work_dir: Path, mo
     raise EnhanceError(
         f"モデル {model} の出力から目的のステムを特定できませんでした: {names}"
     )
+
+
+def _stem_labels(filename: str) -> list[str]:
+    """ファイル名から括弧内のステムラベルを正規化して取り出す。"""
+    return [re.sub(r"[\s_\-]+", "", m.lower()) for m in re.findall(r"\(([^)]+)\)", filename)]
