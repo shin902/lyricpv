@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>歌詞追従プレイヤー</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    .container {
+      text-align: center;
+      padding: 20px;
+      width: 100%;
+      max-width: 800px;
+    }
+
+    .lyrics-display {
+      min-height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 40px;
+    }
+
+    .char {
+      font-size: 80px;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+      transition: transform 0.1s ease, color 0.2s ease;
+      display: inline-block;
+      margin: 0 2px;
+    }
+
+    .char.active {
+      transform: scale(1.3);
+      color: #ffd700;
+      text-shadow: 0 0 30px rgba(255, 215, 0, 0.8), 0 0 60px rgba(255, 215, 0, 0.4);
+    }
+
+    .controls {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 12px 30px;
+      font-size: 18px;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-weight: bold;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .progress-container {
+      width: 100%;
+      max-width: 600px;
+      margin-top: 30px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .time-display {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 14px;
+      margin-top: 10px;
+    }
+
+    .loading {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 20px;
+    }
+
+    .info {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 style="color: #fff; margin-bottom: 30px; font-size: 24px;">歌詞追従プレイヤー</h1>
+
+    <div class="lyrics-display" id="lyricsDisplay">
+      <div class="loading">読み込み中...</div>
+    </div>
+
+    <div class="controls">
+      <button id="playBtn" disabled>再生</button>
+      <button id="pauseBtn" disabled>一時停止</button>
+      <button id="stopBtn" disabled>停止</button>
+    </div>
+
+    <div class="progress-container">
+      <div class="progress-bar" id="progressBar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="time-display" id="timeDisplay">0:00 / 0:00</div>
+    </div>
+
+    <div class="info"></div>
+  </div>
+
+  <script type="module">
+    import { Player, htmlAudioAdapter } from './sdk/lyric-player.mjs';
+
+    const player = new Player({ tickIntervalMs: 16 });
+    const lyricsDisplay = document.getElementById('lyricsDisplay');
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const timeDisplay = document.getElementById('timeDisplay');
+    // アダプタを作成（audio 要素を動的に作成）
+    const audio = new Audio('../../data/songs/relpy/master.wav');
+    audio.controls = false;
+    document.body.appendChild(audio);
+    const adapter = htmlAudioAdapter(audio);
+
+    // JSON データの読み込み
+    let jsonData = null;
+    fetch('../../data/songs/relpy/lyric_data.json')
+      .then(res => res.json())
+      .then(json => {
+        jsonData = json;
+        return player.load(json, adapter);
+      })
+      .then(() => {
+        document.querySelector('.loading').textContent = '準備完了';
+        playBtn.disabled = false;
+        pauseBtn.disabled = false;
+        stopBtn.disabled = false;
+
+        // 曲情報を表示
+        const title = jsonData.song.title;
+        const artist = jsonData.song.artist;
+        const duration = formatTime(jsonData.song.durationMs);
+        document.querySelector('h1').textContent = `${title} - ${artist}`;
+        document.querySelector('.info').innerHTML = `再生時間: ${duration}`;
+      })
+      .catch(err => {
+        document.querySelector('.loading').textContent = `エラー: ${err.message}`;
+        console.error(err);
+      });
+
+    // 現在の文字をレンダリング
+    let currentCharData = null;
+    let prevChar = null;
+
+    function renderChar(charData, ms) {
+      if (!charData) {
+        lyricsDisplay.innerHTML = '<span style="color: rgba(255,255,255,0.5); font-size: 24px;">...</span>';
+        return;
+      }
+
+      const char = charData.char || '';
+      const isActive = char !== prevChar;
+
+      // 声量でスケール調整
+      const amplitude = player.getVocalAmplitude(ms);
+      const scale = 1 + amplitude * 0.4;
+
+      // サビかどうかで色変更
+      const isChorus = player.findChorus(ms) !== null;
+      const color = isChorus ? '#ffd700' : '#ffffff';
+
+      lyricsDisplay.innerHTML = `
+        <span class="char" style="transform: scale(${scale}); color: ${color};">
+          ${char}
+        </span>
+      `;
+
+      prevChar = char;
+      currentCharData = charData;
+    }
+
+    // timeupdate イベントで歌詞を更新
+    player.on('timeupdate', (ms) => {
+      const charData = player.currentChar(ms);
+      renderChar(charData, ms);
+
+      // プログレスバー更新
+      const duration = player.songDurationMs;
+      if (duration > 0) {
+        const progress = (ms / duration) * 100;
+        progressFill.style.width = `${progress}%`;
+
+        // 時間表示更新
+        timeDisplay.textContent = `${formatTime(ms)} / ${formatTime(duration)}`;
+      }
+    });
+
+    player.on('ready', () => {
+      console.log('Player ready');
+    });
+
+    player.on('play', () => {
+      console.log('Playing');
+    });
+
+    player.on('pause', () => {
+      console.log('Paused');
+    });
+
+    player.on('end', () => {
+      console.log('Ended');
+      progressFill.style.width = '100%';
+      timeDisplay.textContent = formatTime(player.songDurationMs);
+    });
+
+    // ボタン制御
+    playBtn.addEventListener('click', () => {
+      player.play();
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      player.pause();
+    });
+
+    stopBtn.addEventListener('click', () => {
+      player.pause();
+      player.seek(0);
+    });
+
+    // プログレスバークリックでシーク
+    progressBar.addEventListener('click', (e) => {
+      const rect = progressBar.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const percent = x / rect.width;
+      const duration = player.songDurationMs;
+      const targetMs = percent * duration;
+      player.seek(targetMs);
+      // 手動シーク時は timeupdate を 1 回発火
+      player.tick();
+    });
+
+    // 時間フォーマット
+    function formatTime(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // キーボードショートカット
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (audio.paused) {
+          player.play();
+        } else {
+          player.pause();
+        }
+      }
+    });
+
+    // 初期時間表示
+    timeDisplay.textContent = '0:00 / 0:00';
+  </script>
+</body>
+</html>

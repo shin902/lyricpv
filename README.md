@@ -99,7 +99,7 @@ YouTube URL またはサーバー上のファイルパスを入力し、歌詞(L
 </script>
 ```
 
-API 詳細は [docs/sdk-reference.md](docs/sdk-reference.md) を参照。
+API 詳細は [docs/sdk-reference.md](docs/sdk-reference.md) を参照。動作するサンプル一式は [examples/simple-player](examples/simple-player) にあります。
 
 ## テスト
 
