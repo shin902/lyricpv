@@ -38,6 +38,9 @@ class MusicMap:
     chords: list[Chord] = field(default_factory=list)
     segments: list[Segment] = field(default_factory=list)
     amplitude: list[AmplitudePoint] = field(default_factory=list)
+    # アライメント補正用の歌唱活動度 (オンセットゲート済み)。契約A には含めず
+    # align() の歌唱区間推定だけに使う (amplitude とは用途が異なる — 下記参照)
+    vocal_activity: list[AmplitudePoint] = field(default_factory=list)
     valence_arousal: list[VAPoint] = field(default_factory=list)
     tempo_bpm: float = 0.0
 
@@ -60,7 +63,7 @@ def analyze(master_path: str | Path, vocals_path: str | Path | None = None) -> M
         yv, _ = librosa.load(str(vocals_path), sr=ANALYSIS_SR, mono=True)
     else:
         yv = y  # 分離ボーカルが無い場合は全体ミックスで代用
-    amplitude = _vocal_amplitude(yv, sr)
+    amplitude, vocal_activity = _vocal_envelopes(yv, sr)
 
     va = _valence_arousal(y, chroma, sr, tempo_bpm)
 
@@ -69,6 +72,7 @@ def analyze(master_path: str | Path, vocals_path: str | Path | None = None) -> M
         chords=chords,
         segments=segments,
         amplitude=amplitude,
+        vocal_activity=vocal_activity,
         valence_arousal=va,
         tempo_bpm=tempo_bpm,
     )
@@ -215,8 +219,19 @@ def _detect_segments(
     return segments
 
 
-def _vocal_amplitude(yv: np.ndarray, sr: int, step_ms: int = 50) -> list[AmplitudePoint]:
-    """分離ボーカルの RMS を 0–1 に正規化した声量エンベロープ。"""
+def _vocal_envelopes(
+    yv: np.ndarray, sr: int, step_ms: int = 50
+) -> tuple[list[AmplitudePoint], list[AmplitudePoint]]:
+    """声量 (amplitude) と歌唱活動度 (vocal_activity) の 2 本のエンベロープを返す。
+
+    - amplitude: RMS を 0–1 に正規化したもの。契約A に載り SDK の
+      ``getVocalAmplitude()`` (演出用パラメータ) になるため、聞こえる音量を
+      そのまま表すよう加工しない。
+    - vocal_activity: Demucs は残響(エコー)やハモリをリードボーカルと分離
+      できず vocals に残るため、RMS だけでは歌唱区間の終わりに余韻が伸びて
+      しまう (#3)。余韻は新たな音の立ち上がり(オンセット)を持たないので、
+      `_onset_decay_gate` を掛けて尾を抑えたものを歌唱区間推定用に別に持つ。
+    """
     rms = librosa.feature.rms(y=yv, hop_length=HOP)[0]
     times_ms = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=HOP) * 1000
 
@@ -226,13 +241,49 @@ def _vocal_amplitude(yv: np.ndarray, sr: int, step_ms: int = 50) -> list[Amplitu
     else:
         norm = np.clip(rms / scale, 0.0, 1.0)
 
+    onset_env = librosa.onset.onset_strength(y=yv, sr=sr, hop_length=HOP)
+    gate = _onset_decay_gate(onset_env, sr, HOP)
+    n = min(len(norm), len(gate))
+
+    amplitude = _sample_points(times_ms, norm, step_ms)
+    activity = _sample_points(times_ms[:n], norm[:n] * gate[:n], step_ms)
+    return amplitude, activity
+
+
+def _sample_points(times_ms: np.ndarray, values: np.ndarray, step_ms: int) -> list[AmplitudePoint]:
+    """フレーム列を step_ms 間隔の AmplitudePoint 列に間引く。"""
     points: list[AmplitudePoint] = []
     next_t = 0.0
-    for t, v in zip(times_ms, norm):
+    for t, v in zip(times_ms, values):
         if t >= next_t:
             points.append(AmplitudePoint(time=int(t), value=round(float(v), 4)))
             next_t += step_ms
     return points
+
+
+def _onset_decay_gate(
+    onset_env: np.ndarray, sr: int, hop: int, decay_ms: float = 400.0, floor: float = 0.35
+) -> np.ndarray:
+    """オンセット直後を 1.0 とし、次の立ち上がりまで `floor` へ線形減衰するゲート。
+
+    エコー/ハモリの余韻は新たな音の立ち上がり(オンセット)を伴わず鳴り続けるため、
+    このゲートで時間とともに減衰させ、リードボーカルの輪郭を相対的に強調する。
+    """
+    n = len(onset_env)
+    if n == 0:
+        return np.array([])
+
+    onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=hop, units="frames")
+
+    frame_ms = hop / sr * 1000
+    decay_frames = max(1, int(decay_ms / frame_ms))
+
+    gate = np.full(n, floor)
+    for f in onsets:
+        end = min(n, f + decay_frames + 1)
+        ramp = np.linspace(1.0, floor, end - f)
+        gate[f:end] = np.maximum(gate[f:end], ramp)
+    return gate
 
 
 def _valence_arousal(
