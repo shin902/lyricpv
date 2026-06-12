@@ -11,9 +11,12 @@ import pytest
 
 from lyricpv.refine import (
     DEFAULT_ALIGN_MODEL,
+    _MAX_LAST_CHAR_MS,
+    _TYPICAL_CHAR_MS,
     AlignedChar,
     RefineError,
     _apply_char_times,
+    _clamp_tail,
     refine_phrases,
 )
 from lyricpv.schema import Char, Phrase, Word
@@ -102,6 +105,73 @@ def test_apply_char_times_rejects_start_before_previous_phrase():
     p = make_phrase(["夜"], 10_000, 11_000)
     aligned = [AlignedChar("夜", 9_000, 9_500)]
     assert not _apply_char_times(p, aligned, min_start=9_500)
+
+
+def test_apply_char_times_rejects_window_edge_saturation():
+    """実測が探索窓の先頭に張り付いた行は縮退アラインメントとみなして棄却する。
+    (実データで -pad ちょうどに張り付く行が観測された #3)"""
+    p = make_phrase(["夜", "に"], 10_000, 12_000)
+    window_start = 9_600
+    aligned = [AlignedChar("夜", 9_610, 9_800), AlignedChar("に", 9_900, 10_100)]
+    assert not _apply_char_times(p, aligned, window_start=window_start)
+    # 窓の端から十分離れていれば採用される
+    aligned_ok = [AlignedChar("夜", 10_200, 10_400), AlignedChar("に", 10_500, 10_700)]
+    assert _apply_char_times(p, aligned_ok, window_start=window_start)
+
+
+def test_apply_char_times_does_not_stretch_trailing_punctuation():
+    """行末の実測なし文字 (括弧・リーダー等) は最後の確定点の直後に短く置き、
+    行末まで引き伸ばさない (実データで最大 4 秒のギャップが観測された #3)。"""
+    p = make_phrase(["はい", "）"], 10_000, 16_000)
+    aligned = [AlignedChar("は", 10_100, 10_300), AlignedChar("い", 10_400, 10_600)]
+    assert _apply_char_times(p, aligned)
+
+    paren = flat_chars(p)[-1]
+    assert paren.char == "）"
+    assert paren.start_time == 10_600
+    assert paren.end_time <= 10_600 + _TYPICAL_CHAR_MS
+    assert p.end_time == paren.end_time  # フレーズ末尾も追従して縮む
+
+
+def test_apply_char_times_ignores_measured_times_for_punctuation():
+    """句読点・記号は whisperx が補間時刻 (窓の末尾など) を返しても採らず、
+    直前の確定点に隣接させる。"""
+    p = make_phrase(["はい", "）"], 10_000, 16_000)
+    aligned = [
+        AlignedChar("は", 10_100, 10_300),
+        AlignedChar("い", 10_400, 10_600),
+        AlignedChar("）", 15_900, 15_950),  # whisperx の補間値 (信用しない)
+    ]
+    assert _apply_char_times(p, aligned)
+    paren = flat_chars(p)[-1]
+    assert paren.char == "）"
+    assert paren.start_time == 10_600
+
+
+def test_apply_char_times_caps_silence_absorbed_last_char():
+    """行末の無音・間奏を吸収して伸びた最後の文字は上限で切り詰める
+    (実データで 4.3 秒に伸びた「ど」を観測 #3)。"""
+    p = make_phrase(["はい"], 10_000, 16_000)
+    aligned = [AlignedChar("は", 10_100, 10_300), AlignedChar("い", 10_400, 14_700)]
+    assert _apply_char_times(p, aligned)
+    last = flat_chars(p)[-1]
+    assert last.end_time == 10_400 + _MAX_LAST_CHAR_MS
+    assert p.end_time == last.end_time
+
+
+def test_clamp_tail_removes_start_time_inversions():
+    """前の行の末尾文字が次の行の頭を追い越したら切り詰める (SDK の二分探索対策)。"""
+    prev = make_phrase(["はい", "）"], 10_000, 13_000)
+    # 「）」は 12_000 から始まる。次の行が 11_500 に始まり追い越されたとする
+    _clamp_tail(prev, 11_500)
+
+    last = flat_chars(prev)[-1]
+    assert last.start_time == 11_500
+    assert last.end_time >= 11_501
+    assert prev.words[-1].start_time == 11_500
+    # 切り詰め後も flat 配列は非減少
+    starts = [c.start_time for c in flat_chars(prev)]
+    assert starts == sorted(starts)
 
 
 class _FakeWhisperx:
