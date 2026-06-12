@@ -8,6 +8,11 @@ __pycache__/
 # プロジェクトデータ(解析済み楽曲・音源は再配布しない)
 data/
 
+# サンプルに動作確認用として配置する解析データ・音源(再配布しない)
+examples/**/lyric_data.json
+examples/**/meta.json
+examples/**/*.wav
+
 # Node
 node_modules/
 
