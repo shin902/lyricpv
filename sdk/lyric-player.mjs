@@ -138,6 +138,7 @@ export class Player {
 
   /**
    * 契約A の JSON と音源アダプタを読み込む。
+   * 渡された json は変更せず、Player は専有のディープコピーを保持する。
    * @param {Object} json 契約A (TextAlive 互換 JSON)
    * @param {AudioAdapter} audio
    */
@@ -145,7 +146,9 @@ export class Player {
     if (!json || !json.song || !Array.isArray(json.phrases)) {
       throw new Error("契約Aの形式ではありません: song / phrases がありません");
     }
-    this._data = json;
+    this._stopTicking();
+    this._audio?.pause(); // 再生中の再load: 旧アダプタを止める
+    this._data = structuredClone(json);
     this._audio = audio;
     this._offsetMs = json.song.source?.offsetMs ?? 0;
     this._rebuildIndex();

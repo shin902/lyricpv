@@ -78,6 +78,14 @@ def test_analyze_rejects_missing_file(client):
     assert res.status_code == 422
 
 
+def test_analyze_rejects_unknown_model(client, synth_wav_path):
+    res = client.post(
+        "/api/songs",
+        json={"source": str(synth_wav_path), "model": "not-a-real-model"},
+    )
+    assert res.status_code == 422
+
+
 def test_job_not_found(client):
     assert client.get("/api/jobs/deadbeef").status_code == 404
 

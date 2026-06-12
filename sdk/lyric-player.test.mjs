@@ -102,6 +102,18 @@ test("load は不正な JSON を拒否する", async () => {
   await assert.rejects(() => player.load({}, manualClockAdapter(1000)));
 });
 
+test("load は渡された JSON を破壊的に変更しない", async () => {
+  const player = new Player();
+  const json = fixture();
+  const before = JSON.parse(JSON.stringify(json));
+
+  await player.load(json, manualClockAdapter(60_000));
+  player.applyOverrides([{ path: [0, 0], endTime: 2400 }]);
+
+  assert.deepEqual(json, before); // 呼び出し側の JSON は無変更
+  assert.notEqual(player.data.phrases[0].words[0].endTime, before.phrases[0].words[0].endTime);
+});
+
 test("findBeat は直近の拍を返す", async () => {
   const { player } = await loadedPlayer();
   assert.equal(player.findBeat(0).position, 1);
@@ -187,6 +199,20 @@ test("offsetMs は position と seek に反映される", async () => {
   assert.equal(player.position, 1200);
 });
 
+test("setOffset 後も position 軸で参照APIが機能する", async () => {
+  const { player, clock } = await loadedPlayer();
+
+  player.setOffset(1000); // 音源 0ms = 解析軸 1000ms
+  assert.equal(player.position, 1000);
+  assert.equal(player.currentPhrase(player.position).text, "夜に");
+
+  player.seek(2500); // 解析軸 2500ms へ移動
+  assert.equal(clock.getPositionMs(), 1500); // 音源側は offset 分引いた位置
+  assert.equal(player.position, 2500);
+  assert.equal(player.currentWord(player.position).text, "に");
+  assert.equal(player.currentChar(player.position).char, "に");
+});
+
 test("applyOverrides で char タイミングを補正できる", async () => {
   const { player } = await loadedPlayer();
   // メリスマ補正の想定: 「夜」と「に」の境界を 2000ms → 2400ms へずらす
@@ -206,6 +232,24 @@ test("applyOverrides で char タイミングを補正できる", async () => {
 test("applyOverrides は不正なパスを拒否する", async () => {
   const { player } = await loadedPlayer();
   assert.throws(() => player.applyOverrides([{ path: [99], startTime: 0 }]));
+});
+
+test("再生中に load() を再呼び出しすると旧 tick が残らない", async () => {
+  const player = new Player({ tickIntervalMs: 5 });
+  await player.load(fixture(), manualClockAdapter(60_000));
+
+  const positions = [];
+  player.on("timeupdate", (ms) => positions.push(ms));
+
+  player.play();
+  await new Promise((r) => setTimeout(r, 30));
+  assert.ok(positions.length > 0); // 旧 tick が動作していることを確認
+
+  await player.load(fixture(), manualClockAdapter(60_000));
+
+  positions.length = 0;
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(positions, []); // load() で旧 tick は停止し、再生もしていない
 });
 
 test("timeupdate は tick で発火する", async () => {

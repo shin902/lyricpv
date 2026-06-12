@@ -17,15 +17,16 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from ..pipeline import LYRIC_DATA_FILENAME, META_FILENAME, PipelineOptions
-from .jobs import JobManager
+from .jobs import JobManager, SONG_ID_CHARS
 
-_SONG_ID_RE = re.compile(r"^[\w\-ぁ-んァ-ヶ一-龠ー]+$")
+_SONG_ID_RE = re.compile(rf"^[{SONG_ID_CHARS}]+$")
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -36,7 +37,7 @@ class AnalyzeRequest(BaseModel):
     artist: str | None = None
     lyrics: str | None = Field(default=None, description="LRC またはプレーン歌詞 (任意)")
     vocaloid: bool = False
-    model: str = "htdemucs"
+    model: Literal["htdemucs", "htdemucs_ft"] = "htdemucs"
     skipSeparation: bool = False
 
 

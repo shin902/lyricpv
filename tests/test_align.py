@@ -1,8 +1,10 @@
 """モーラ按分アライメントのテスト。"""
 
-from lyricpv.lyrics.align import _MAX_MS_PER_MORA, _TYPICAL_MS_PER_MORA, align
-from lyricpv.lyrics.lrc import parse_lrc
-from lyricpv.lyrics.morph import analyze_line
+from unittest.mock import patch
+
+from lyricpv.lyrics.align import _MAX_MS_PER_MORA, _TYPICAL_MS_PER_MORA, _align_plain, _vocal_active_span, align
+from lyricpv.lyrics.lrc import LyricLine, parse_lrc
+from lyricpv.lyrics.morph import MorphWord, analyze_line
 from lyricpv.schema import AmplitudePoint
 
 
@@ -74,6 +76,25 @@ def test_small_kana_gets_shorter_span():
     by_char = {c.char: c.end_time - c.start_time for c in chars}
     # 小書き「ャ」は通常文字より短い
     assert by_char["ャ"] < by_char["キ"]
+
+
+def test_align_plain_skips_empty_morph_lines_without_gap():
+    # 形態素解析結果が空になる行 (記号のみ等) は按分対象から除外され、
+    # その行の分の weight が total に混入して隙間が残ることを防ぐ
+    word_a = MorphWord(surface="a", pos="名詞", reading="a", mora_count=1)
+    word_b = MorphWord(surface="b", pos="名詞", reading="b", mora_count=1)
+    morphs_by_text = {"a": [word_a], "skip": [], "b": [word_b]}
+
+    lines = [LyricLine(text="a"), LyricLine(text="skip"), LyricLine(text="b")]
+    duration_ms = 100_000
+    with patch("lyricpv.lyrics.align.analyze_line", side_effect=morphs_by_text.__getitem__):
+        phrases = _align_plain(lines, duration_ms, None)
+
+    assert len(phrases) == 2
+    span_start, span_end = _vocal_active_span(duration_ms, None)
+    span = span_end - span_start
+    # "skip" 行の weight が total に混入していれば start_time はもっと小さくなる
+    assert phrases[1].start_time == span_start + span // 2
 
 
 def test_word_synced_last_word_uses_typical_mora_duration():

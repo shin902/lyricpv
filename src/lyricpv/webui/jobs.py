@@ -42,14 +42,24 @@ class Job:
             }
 
 
+# song_id として許容する文字クラス。\w は Unicode モードで漢字・かなを含むが、
+# 対象範囲を明示するため日本語の文字クラスも併記する (々・〆 等の範囲外の記号は
+# slugify() により _ に置換される)。webui/app.py の _SONG_ID_RE もこの定数を
+# 使い、slugify() の出力形式と検証パターンが乖離しないようにする。
+SONG_ID_CHARS = r"\w\-ぁ-んァ-ヶ一-龠ー"
+
+
 def slugify(text: str) -> str:
     """タイトル等から出力ディレクトリ名を作る。"""
     text = unicodedata.normalize("NFKC", text).strip()
-    text = re.sub(r"[^\w\-ぁ-んァ-ヶ一-龠ー]+", "_", text)
+    text = re.sub(rf"[^{SONG_ID_CHARS}]+", "_", text)
     return text.strip("_")[:60] or "song"
 
 
 class JobManager:
+    # ジョブ辞書が無制限に増えないよう、完了済みジョブの保持上限を設ける
+    MAX_JOBS = 100
+
     def __init__(self, data_dir: str | Path, max_concurrency: int = 1):
         self.data_dir = Path(data_dir)
         self._jobs: dict[str, Job] = {}
@@ -61,11 +71,28 @@ class JobManager:
         job = Job(id=uuid.uuid4().hex[:12], source=source)
         with self._lock:
             self._jobs[job.id] = job
+            self._prune_locked()
         thread = threading.Thread(
             target=self._run, args=(job, options), name=f"lyricpv-job-{job.id}", daemon=True
         )
         thread.start()
         return job
+
+    def _prune_locked(self) -> None:
+        """完了/失敗ジョブを古い順に間引き、保持件数を MAX_JOBS 以下に保つ。
+
+        呼び出し側で self._lock を保持していること。
+        pending/running のジョブは間引かないため、それらだけで MAX_JOBS を
+        超えて滞留している間は一時的に上限を超えうる
+        (ローカルツール用途の同時実行数を想定した設計)。
+        """
+        if len(self._jobs) <= self.MAX_JOBS:
+            return
+        for job_id, job in list(self._jobs.items()):
+            if len(self._jobs) <= self.MAX_JOBS:
+                break
+            if job.status in ("done", "error"):
+                del self._jobs[job_id]
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
