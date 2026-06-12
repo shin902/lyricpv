@@ -132,3 +132,12 @@ LYRICPV_RUN_SEPARATION_TESTS=1 uv run pytest tests/test_separate.py
 - [docs/architecture.md](docs/architecture.md) — 設計判断と要件定義からの調整点
 - [docs/sdk-reference.md](docs/sdk-reference.md) — ランタイム SDK API リファレンス
 - [docs/lyric-pv-sdk-requirements.md](docs/lyric-pv-sdk-requirements.md) — 要件定義
+
+## クレジット
+
+本プロジェクトは [TextAlive App API](https://developer.textalive.jp/) にインスパイアされ、API の形も意図的に似せています。
+
+- 「SDK はデータとライフサイクルの供給に徹し、描画は行わない」という設計思想そのもの
+- `findBeat(time)` / `findChord(time)` — TextAlive の `IPlayer.findBeat` / `findChord` と同名・同概念
+- `currentChar(ms)` / `currentWord(ms)` / `currentPhrase(ms)` — TextAlive の `IVideo.findChar` / `findWord` / `findPhrase`(指定時刻に発声中の文字・単語・フレーズを返す)を、lyricpv では `current*` という命名に変えて採用
+- `player.on(event, cb)` による購読形式 — TextAlive の `Player` のイベントリスナ(`onPlay` / `onPause` / `onTimeUpdate` 等)のスタイルを踏襲
