@@ -57,6 +57,15 @@ uv run lyricpv analyze song.wav --enhance-vocals
 # (重い処理のため既定 OFF。要: uv sync --extra refine。--enhance-vocals と併用可)
 uv run lyricpv analyze song.wav --refine-align
 
+# 補正のチューニング(既定値は実曲の実測分布から決定。詳細: --help)
+#   --refine-pad          行窓の探索パディング ms(LRC が全体的にずれている曲は広げる)
+#   --refine-min-score    潰れ実測を捨てる文字スコア閾値 / --refine-min-match 行の最低マッチ率
+#   --refine-max-squashed 崩壊判定(超えた行は按分のまま) / --refine-max-crossing 次行追い越し許容文字数
+uv run lyricpv analyze song.wav --refine-align --refine-pad 600 --refine-max-squashed 2
+
+# enhance のモデル差し替え('none' で段をスキップ。一覧: uv run audio-separator --list_models)
+uv run lyricpv analyze song.wav --enhance-vocals --dereverb-model none
+
 # 対話モード(YouTube の装飾タイトル/チャンネル名で歌詞検索が外れるとき)
 #   ・取得後に title/artist を確認・修正してから検索
 #   ・ヒットした歌詞の冒頭を表示し、違えば打ち直して再検索 (Y/n/r)

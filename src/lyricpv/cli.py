@@ -39,8 +39,41 @@ def main(argv: list[str] | None = None) -> int:
         help="分離ボーカルにハモリ・残響除去を掛ける (要: uv sync --extra enhance)",
     )
     p_analyze.add_argument(
+        "--karaoke-model", default=None, metavar="MODEL",
+        help="enhance 1 段目 (ハモリ除去) のモデルファイル名。'none' でスキップ "
+        "(一覧: uv run audio-separator --list_models)",
+    )
+    p_analyze.add_argument(
+        "--dereverb-model", default=None, metavar="MODEL",
+        help="enhance 2 段目 (残響除去) のモデルファイル名。'none' でスキップ",
+    )
+    p_analyze.add_argument(
         "--refine-align", action="store_true",
         help="強制アラインメントで word/char 時刻を実測値に補正する (要: uv sync --extra refine)",
+    )
+    p_analyze.add_argument(
+        "--refine-model", default=None, metavar="MODEL",
+        help="refine の CTC アラインメントモデル (HuggingFace ID)",
+    )
+    p_analyze.add_argument(
+        "--refine-pad", type=int, default=None, metavar="MS",
+        help="refine の行窓の探索パディング。LRC が全体的にずれている曲は広げる (既定: 400)",
+    )
+    p_analyze.add_argument(
+        "--refine-min-match", type=float, default=None, metavar="X",
+        help="行を補正する最低マッチ率 0〜1 (既定: 0.5)",
+    )
+    p_analyze.add_argument(
+        "--refine-min-score", type=float, default=None, metavar="X",
+        help="この文字スコア未満の実測は潰れとして捨てる 0〜1 (既定: 0.35)",
+    )
+    p_analyze.add_argument(
+        "--refine-max-squashed", type=int, default=None, metavar="N",
+        help="行中間で許容する潰れ実測の数。超えた行は按分のまま (既定: 1)",
+    )
+    p_analyze.add_argument(
+        "--refine-max-crossing", type=int, default=None, metavar="N",
+        help="次行の頭を追い越してよい文字数。超えた行は按分のまま (既定: 1)",
     )
 
     p_serve = sub.add_parser("serve", help="WebUI (解析フロントエンド) を起動する")
@@ -59,10 +92,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
-    from .enhance import EnhanceError
+    from .enhance import DEFAULT_DEREVERB_MODEL, DEFAULT_KARAOKE_MODEL, EnhanceError
     from .fetch import FetchError, check_external_tools, extract_youtube_id, is_url
     from .pipeline import PipelineOptions, run
-    from .refine import RefineError
+    from .refine import RefineError, RefineParams
     from .separate import SeparationError
 
     missing = check_external_tools()
@@ -97,6 +130,23 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             stem = Path(source).stem
         out_dir = Path("data/songs") / stem
 
+    # 指定されたフラグだけ既定値を上書きする (None = 未指定)
+    refine_overrides = {
+        "model_name": args.refine_model,
+        "pad_ms": args.refine_pad,
+        "min_match_ratio": args.refine_min_match,
+        "min_char_score": args.refine_min_score,
+        "max_squashed_mid_chars": args.refine_max_squashed,
+        "max_crossing_chars": args.refine_max_crossing,
+    }
+    try:
+        refine_params = RefineParams(
+            **{k: v for k, v in refine_overrides.items() if v is not None}
+        )
+    except ValueError as e:
+        print(f"エラー: {e}", file=sys.stderr)
+        return 1
+
     options = PipelineOptions(
         title=args.title,
         artist=args.artist,
@@ -106,7 +156,10 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         device=args.device,
         skip_separation=args.skip_separation,
         enhance_vocals=args.enhance_vocals,
+        enhance_karaoke_model=_model_flag(args.karaoke_model, DEFAULT_KARAOKE_MODEL),
+        enhance_dereverb_model=_model_flag(args.dereverb_model, DEFAULT_DEREVERB_MODEL),
         refine_align=args.refine_align,
+        refine_params=refine_params,
     )
 
     def progress(stage: str, message: str) -> None:
@@ -132,6 +185,15 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         return 1
     print(f"完了: {result.json_path} (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})")
     return 0
+
+
+def _model_flag(value: str | None, default: str | None) -> str | None:
+    """モデル指定フラグを解決する。未指定なら既定値、'none' ならその段をスキップ。"""
+    if value is None:
+        return default
+    if value.strip().lower() == "none":
+        return None
+    return value
 
 
 def _prompt(label: str, default: str | None = None) -> str:

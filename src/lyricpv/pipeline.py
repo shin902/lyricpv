@@ -21,12 +21,12 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 from . import music_map
-from .enhance import enhance_vocals
+from .enhance import DEFAULT_DEREVERB_MODEL, DEFAULT_KARAOKE_MODEL, enhance_vocals
 from .fetch import FetchResult, fetch_youtube, import_file, is_url
 from .lyrics.align import align
 from .lyrics.fetch import fetch_lyrics
 from .lyrics.lrc import LyricLine, is_word_synced, parse_lrc
-from .refine import refine_phrases
+from .refine import RefineParams, refine_phrases
 from .schema import LyricData, SongMeta, SongSource
 from .separate import separate
 
@@ -73,9 +73,14 @@ class PipelineOptions:
     # 分離ボーカルにハモリ除去・残響除去を掛ける (#3)。重い処理かつ
     # audio-separator (extra: enhance) が必要なため既定 OFF
     enhance_vocals: bool = False
+    # enhance の各段で使うモデル (None でその段をスキップ)
+    enhance_karaoke_model: str | None = DEFAULT_KARAOKE_MODEL
+    enhance_dereverb_model: str | None = DEFAULT_DEREVERB_MODEL
     # 強制アラインメント (whisperx) で word/char 時刻を実測値に補正する (#3, #6)。
     # モデル DL と推論が重く whisperx (extra: refine) が必要なため既定 OFF
     refine_align: bool = False
+    # refine の調整パラメータ (CLI の --refine-* から上書き)
+    refine_params: RefineParams = field(default_factory=RefineParams)
 
 
 @dataclass
@@ -157,7 +162,12 @@ def run(
         # ③' ボーカル強化 (opt-in): ハモリ・残響を除去し歌唱区間推定を安定させる (#3)
         if options.enhance_vocals:
             report("enhance", "ボーカル強化 (ハモリ・残響除去) を実行しています")
-            enhanced = enhance_vocals(vocals_path, out_dir)
+            enhanced = enhance_vocals(
+                vocals_path,
+                out_dir,
+                karaoke_model=options.enhance_karaoke_model,
+                dereverb_model=options.enhance_dereverb_model,
+            )
             vocals_path = enhanced.vocals_path
             enhance_models = enhanced.models_used
             report("enhance", f"強化完了 (モデル: {', '.join(enhance_models)})")
@@ -184,7 +194,9 @@ def run(
             report("refine", "歌詞が無いため強制アラインメントをスキップします")
         else:
             report("refine", "強制アラインメント (whisperx) で時刻を補正しています")
-            rr = refine_phrases(phrases, vocals_path, device=options.device)
+            rr = refine_phrases(
+                phrases, vocals_path, device=options.device, params=options.refine_params
+            )
             refine_model = rr.model
             refined_phrases = rr.refined_count
             report("refine", f"補正完了 ({rr.refined_count}/{rr.total} 行)")
@@ -221,6 +233,18 @@ def run(
         "enhanceModels": enhance_models or None,
         "refineModel": refine_model,
         "refinedPhrases": refined_phrases or None,
+        # 再現性のため、補正に効いたパラメータも記録する
+        "refineParams": (
+            {
+                "padMs": options.refine_params.pad_ms,
+                "minMatchRatio": options.refine_params.min_match_ratio,
+                "minCharScore": options.refine_params.min_char_score,
+                "maxSquashedMidChars": options.refine_params.max_squashed_mid_chars,
+                "maxCrossingChars": options.refine_params.max_crossing_chars,
+            }
+            if refine_model
+            else None
+        ),
     }
     (out_dir / META_FILENAME).write_text(
         json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8"

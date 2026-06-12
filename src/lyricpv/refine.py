@@ -32,9 +32,6 @@ DEFAULT_ALIGN_MODEL = "jonatasgrosman/wav2vec2-large-xlsr-53-japanese"
 # 行窓の探索パディング。LRC の行時刻自体がこれ以上ずれている場合は補正しきれない
 DEFAULT_PAD_MS = 400
 
-# 行内の文字のうち、この割合以上に実測時刻が付かなければその行は按分値のまま残す
-_MIN_MATCH_RATIO = 0.5
-
 # 実測が付かない行頭・行末の文字 (括弧・句読点等が多い) に与える既定の長さ。
 # 行端アンカーで補間すると「...」等が間奏まで引き伸ばされるため定数で置く
 _TYPICAL_CHAR_MS = 150
@@ -53,19 +50,61 @@ _MAX_LAST_CHAR_MS = 2000
 # (弱く歌われた「〜だろう」の「う」や、縮退パスの中間文字) なので採らない
 _ONE_FRAME_MS = 25
 
-# whisperx の文字スコアがこれ未満の実測も潰れとみなす。実データ (Reply 38 行)
-# では正当な実測は score>=0.46、潰れは 0.0〜0.07 に分布し明確に分離する
-# (0.35〜0.75 の中間帯には正当な文字が多いため、これ以上は上げない)
-_MIN_CHAR_SCORE = 0.35
-
-# 行中間 (行末の文字を除く) で許容する潰れ実測の数。これを超える行は CTC
-# パスが途中で崩壊している (実データ: 正常行は最大 1、文字が数十 ms 間隔で
-# 流れる縮退行は 2〜3) とみなし、行ごと棄却して按分値のまま残す
-_MAX_SQUASHED_MID_CHARS = 1
-
 
 class RefineError(RuntimeError):
     """強制アラインメント補正に失敗したときに送出される。"""
+
+
+@dataclass(frozen=True)
+class RefineParams:
+    """補正の調整パラメータ。CLI の --refine-* フラグから上書きできる。
+
+    既定値は実データ (Reply 38 行) の実測分布から決めたもの (#3)。
+    棄却系の閾値を緩めると補正される行は増えるが、縮退アラインメントが
+    すり抜けて表示が乱れるリスクも増える。
+    """
+
+    # CTC アラインメントモデル (HuggingFace ID)。meta.json に記録される
+    model_name: str = DEFAULT_ALIGN_MODEL
+
+    # 行窓の探索パディング (ms)。LRC の行時刻が全体的にずれている曲は広げる
+    pad_ms: int = DEFAULT_PAD_MS
+
+    # 行内の歌唱文字のうち実測が付いた割合がこれ未満の行は按分のまま残す
+    min_match_ratio: float = 0.5
+
+    # この文字スコア未満の実測は潰れとして捨てる。実データでは正当な実測は
+    # 0.46 以上、潰れは 0.0〜0.07 に分布し明確に分離する (0.35〜0.75 の
+    # 中間帯には正当な文字が多いため、安易に上げない)
+    min_char_score: float = 0.35
+
+    # 行中間 (行末の文字を除く) で許容する潰れ実測の数。これを超える行は
+    # CTC パスの崩壊 (文字が数十 ms 間隔で流れる) とみなし按分のまま残す
+    max_squashed_mid_chars: int = 1
+
+    # 次行の頭を追い越してよい文字数。これを超える行は按分のまま残す。
+    # コール&レスポンスの応答がメインボーカルに重なって次行へ流れ込む行
+    # (実データの「（フリはもうできない）」) は、実測を切り詰めると応答の
+    # 後半が表示されなくなるため、行窓内に按分する従来表示の方が安定する
+    max_crossing_chars: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.model_name:
+            raise ValueError("refine のモデル名 (model_name) が空です")
+        if self.pad_ms < 0:
+            raise ValueError(f"pad_ms は 0 以上で指定してください: {self.pad_ms}")
+        if not 0.0 <= self.min_match_ratio <= 1.0:
+            raise ValueError(f"min_match_ratio は 0〜1 で指定してください: {self.min_match_ratio}")
+        if not 0.0 <= self.min_char_score <= 1.0:
+            raise ValueError(f"min_char_score は 0〜1 で指定してください: {self.min_char_score}")
+        if self.max_squashed_mid_chars < 0:
+            raise ValueError(
+                f"max_squashed_mid_chars は 0 以上で指定してください: {self.max_squashed_mid_chars}"
+            )
+        if self.max_crossing_chars < 0:
+            raise ValueError(
+                f"max_crossing_chars は 0 以上で指定してください: {self.max_crossing_chars}"
+            )
 
 
 @dataclass
@@ -90,30 +129,30 @@ def refine_phrases(
     vocals_path: str | Path,
     *,
     device: str | None = None,
-    model_name: str = DEFAULT_ALIGN_MODEL,
-    pad_ms: int = DEFAULT_PAD_MS,
+    params: RefineParams | None = None,
 ) -> RefineResult:
     """phrases の word/char 時刻を whisperx の実測値で上書きする (in place)。
 
-    行単位で独立に補正し、マッチ率が低い行は按分値のまま残すため、
+    行単位で独立に補正し、マッチ率が低い行・縮退した行は按分値のまま残すため、
     間奏の誤検出や歌詞テキストと歌唱の不一致 (ラララ等) に対して安全側に倒れる。
     """
     whisperx = _import_whisperx()
     dev = device or "cpu"
+    params = params or RefineParams()
 
     if not phrases:
-        return RefineResult(refined_count=0, total=0, model=model_name)
+        return RefineResult(refined_count=0, total=0, model=params.model_name)
 
     try:
         audio = whisperx.load_audio(str(vocals_path))
         model, metadata = whisperx.load_align_model(
-            language_code="ja", device=dev, model_name=model_name
+            language_code="ja", device=dev, model_name=params.model_name
         )
         segments = [
             {
                 "text": p.text,
-                "start": max(0.0, (p.start_time - pad_ms) / 1000),
-                "end": (p.end_time + pad_ms) / 1000,
+                "start": max(0.0, (p.start_time - params.pad_ms) / 1000),
+                "end": (p.end_time + params.pad_ms) / 1000,
             }
             for p in phrases
         ]
@@ -127,20 +166,29 @@ def refine_phrases(
     refined = 0
     prev_start = 0
     prev_phrase: Phrase | None = None
-    for phrase, seg in zip(phrases, aligned_segments):
+    for i, (phrase, seg) in enumerate(zip(phrases, aligned_segments)):
         chars = _parse_chars(seg)
-        window_start = max(0, phrase.start_time - pad_ms)
+        window_start = max(0, phrase.start_time - params.pad_ms)
+        # この時点で次行は未補正なので、安定した境界 (LRC/按分の行頭) になる
+        next_start = phrases[i + 1].start_time if i + 1 < len(phrases) else None
         orig_end = phrase.end_time
-        if _apply_char_times(phrase, chars, min_start=prev_start, window_start=window_start):
+        if _apply_char_times(
+            phrase,
+            chars,
+            min_start=prev_start,
+            window_start=window_start,
+            next_start=next_start,
+            params=params,
+        ):
             _extend_tail(phrase, orig_end)
             refined += 1
         # 前の行の末尾文字 (補間された括弧等) がこの行の頭を追い越すと、
-        # SDK の二分探索の前提 (flat 配列が時刻昇順) が壊れるため切り詰める
+        # 次の行の途中に「現在の文字」として割り込むため切り詰める
         if prev_phrase is not None:
             _clamp_tail(prev_phrase, phrase.start_time)
         prev_start = phrase.start_time
         prev_phrase = phrase
-    return RefineResult(refined_count=refined, total=len(phrases), model=model_name)
+    return RefineResult(refined_count=refined, total=len(phrases), model=params.model_name)
 
 
 def _import_whisperx():
@@ -174,11 +222,11 @@ def _parse_chars(segment: dict) -> list[AlignedChar]:
     return chars
 
 
-def _is_squashed(a: AlignedChar) -> bool:
+def _is_squashed(a: AlignedChar, min_score: float) -> bool:
     """CTC が音声上の居場所を見つけられないまま潰した実測かどうか。"""
     if a.end_ms - a.start_ms <= _ONE_FRAME_MS:
         return True
-    return a.score is not None and a.score < _MIN_CHAR_SCORE
+    return a.score is not None and a.score < min_score
 
 
 def _apply_char_times(
@@ -187,16 +235,21 @@ def _apply_char_times(
     *,
     min_start: int = 0,
     window_start: int | None = None,
+    next_start: int | None = None,
+    params: RefineParams | None = None,
 ) -> bool:
     """フレーズ内の char 時刻を実測値で上書きする。成功したら True。
 
     - 文字の並びを先頭から突き合わせ、一致した文字に実測時刻を入れる
     - 実測が付かなかった文字は前後の確定点の間に均等配置する
       (行頭・行末の run は _TYPICAL_CHAR_MS で短く置き、引き伸ばさない)
-    - マッチ率が _MIN_MATCH_RATIO 未満、補正後の行頭が前の行 (min_start) より
-      前に出る、または実測が探索窓の先頭 (window_start) に張り付いている
-      (縮退アラインメント) 場合は、何も変更せず False を返す (按分値のまま)
+    - 次の場合は何も変更せず False を返す (按分値のまま):
+      マッチ率が min_match_ratio 未満 / 行中間の潰れ実測が
+      max_squashed_mid_chars 超 / 補正後の行頭が前の行 (min_start) より前 /
+      実測が探索窓の先頭 (window_start) に張り付いている (縮退) /
+      次行の頭 (next_start) を追い越す文字が max_crossing_chars 超
     """
+    params = params or RefineParams()
     flat = [c for w in phrase.words for c in w.chars]
     if not flat or not aligned:
         return False
@@ -224,7 +277,7 @@ def _apply_char_times(
         if k < len(aligned):
             a = aligned[k]
             j = k + 1
-            if _is_squashed(a):
+            if _is_squashed(a, params.min_char_score):
                 if i != last_sung:
                     squashed_mid += 1
                 continue
@@ -233,9 +286,9 @@ def _apply_char_times(
 
     # 行中間の潰れが多い行は CTC パスの崩壊 (一部の文字を数十 ms 間隔で
     # 埋めただけの状態)。残った実測も信用できないため行ごと棄却する
-    if squashed_mid > _MAX_SQUASHED_MID_CHARS:
+    if squashed_mid > params.max_squashed_mid_chars:
         return False
-    if matched < max(1, int(n_sung * _MIN_MATCH_RATIO)):
+    if matched < max(1, int(n_sung * params.min_match_ratio)):
         return False
 
     first_matched = next(t for t in times if t)
@@ -251,6 +304,14 @@ def _apply_char_times(
     filled = _enforce_monotonic(filled)
     if filled[0][0] < min_start:
         return False
+
+    # 次行の頭を追い越す文字が多い行は、応答 (コーラス) が次行に重なって
+    # 歌われている。追い越し分は _clamp_tail で次行頭に潰されて表示され
+    # なくなるため、行窓内に按分する従来表示の方が安定する → 棄却
+    if next_start is not None:
+        crossing = sum(1 for s, _ in filled if s > next_start)
+        if crossing > params.max_crossing_chars:
+            return False
 
     k = 0
     for w in phrase.words:

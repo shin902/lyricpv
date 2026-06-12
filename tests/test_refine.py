@@ -15,6 +15,7 @@ from lyricpv.refine import (
     _TYPICAL_CHAR_MS,
     AlignedChar,
     RefineError,
+    RefineParams,
     _apply_char_times,
     _clamp_tail,
     refine_phrases,
@@ -208,6 +209,53 @@ def test_apply_char_times_rejects_collapsed_path():
     assert [(c.start_time, c.end_time) for c in flat_chars(p)] == before
 
 
+def test_apply_char_times_rejects_heavy_crossing_into_next_phrase():
+    """次行の頭を追い越す文字が多い行 (コール&レスポンスの応答が次行に
+    重なって歌われる行) は、切り詰めると後半が表示されなくなるため棄却する。"""
+    p = make_phrase(["はい", "そう"], 10_000, 12_000)
+    before = [(c.start_time, c.end_time) for c in flat_chars(p)]
+    aligned = [
+        AlignedChar("は", 10_100, 10_300, score=0.9),
+        AlignedChar("い", 10_400, 10_600, score=0.9),
+        AlignedChar("そ", 12_300, 12_500, score=0.9),  # 次行 (12_000) を追い越し
+        AlignedChar("う", 12_500, 12_700, score=0.9),  # 同上
+    ]
+    assert not _apply_char_times(p, aligned, next_start=12_000)
+    assert [(c.start_time, c.end_time) for c in flat_chars(p)] == before
+
+    # 追い越しが許容数 (既定 1 文字) 以内なら採用される
+    aligned_ok = [
+        AlignedChar("は", 10_100, 10_300, score=0.9),
+        AlignedChar("い", 10_400, 10_600, score=0.9),
+        AlignedChar("そ", 11_300, 11_500, score=0.9),
+        AlignedChar("う", 12_300, 12_500, score=0.9),  # 1 文字だけ追い越し
+    ]
+    assert _apply_char_times(p, aligned_ok, next_start=12_000)
+
+
+def test_refine_params_can_loosen_collapse_threshold():
+    """max_squashed_mid_chars を緩めると崩壊判定の行も補正対象にできる。"""
+    p = make_phrase(["夜", "に", "駆ける"], 10_000, 12_000)
+    aligned = [
+        AlignedChar("夜", 10_100, 10_300, score=0.9),
+        AlignedChar("に", 10_300, 10_320, score=0.0),
+        AlignedChar("駆", 10_320, 10_340, score=0.0),
+        AlignedChar("け", 10_340, 10_400, score=0.66),
+        AlignedChar("る", 10_400, 10_700, score=0.9),
+    ]
+    params = RefineParams(max_squashed_mid_chars=2)
+    assert _apply_char_times(p, aligned, params=params)
+
+
+def test_refine_params_validation():
+    with pytest.raises(ValueError):
+        RefineParams(min_char_score=1.5)
+    with pytest.raises(ValueError):
+        RefineParams(pad_ms=-1)
+    with pytest.raises(ValueError):
+        RefineParams(model_name="")
+
+
 def test_clamp_tail_removes_start_time_inversions():
     """前の行の末尾文字が次の行の頭を追い越したら切り詰める (SDK の二分探索対策)。"""
     prev = make_phrase(["はい", "）"], 10_000, 13_000)
@@ -278,7 +326,7 @@ def test_refine_phrases_updates_times_and_reports_counts(fake_whisperx, tmp_path
         make_phrase(["夜", "に", "駆ける"], 1_000, 3_000),
         make_phrase(["君", "の", "声"], 4_000, 6_000),
     ]
-    result = refine_phrases(phrases, tmp_path / "vocals.wav", pad_ms=400)
+    result = refine_phrases(phrases, tmp_path / "vocals.wav", params=RefineParams(pad_ms=400))
 
     assert result.refined_count == 2
     assert result.total == 2
@@ -300,7 +348,7 @@ def test_refine_phrases_extends_tail_to_original_end(fake_whisperx, tmp_path):
     余韻として残す (表示が次のフレーズまで消えない #3)。"""
     fake_whisperx.span_ratio = 0.5  # 歌唱が行窓の前半で終わる音源を模す
     p = make_phrase(["夜", "に", "駆ける"], 1_000, 3_000)
-    result = refine_phrases([p], tmp_path / "vocals.wav", pad_ms=400)
+    result = refine_phrases([p], tmp_path / "vocals.wav", params=RefineParams(pad_ms=400))
 
     assert result.refined_count == 1
     assert p.start_time != 1_000  # 開始は実測で補正される
@@ -352,6 +400,9 @@ def test_pipeline_records_refine_model_in_meta(fake_whisperx, tmp_path, synth_wa
     meta = json.loads((result.out_dir / "meta.json").read_text(encoding="utf-8"))
     assert meta["refineModel"] == DEFAULT_ALIGN_MODEL
     assert meta["refinedPhrases"] == 2
+    # 再現性のため、補正パラメータも記録される
+    assert meta["refineParams"]["padMs"] == 400
+    assert meta["refineParams"]["minCharScore"] == 0.35
     # 補正後も契約A の検証を通る JSON が出力されている
     from lyricpv.schema import LyricData
 

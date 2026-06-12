@@ -39,6 +39,53 @@ def test_analyze_reports_separation_error_without_traceback(monkeypatch, capsys,
     assert "Traceback" not in captured.err
 
 
+def test_analyze_passes_tuning_flags_to_pipeline(monkeypatch, tmp_path):
+    """--refine-* / --karaoke-model / --dereverb-model が PipelineOptions に届く。"""
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+    captured = {}
+
+    def fake_run(source, out_dir, *, options, **kwargs):
+        captured["options"] = options
+        return _DummyResult()
+
+    monkeypatch.setattr(pipeline_mod, "run", fake_run)
+
+    code = cli_mod.main([
+        "analyze", "song.wav", "-o", str(tmp_path / "out"),
+        "--refine-align", "--refine-model", "my/align-model",
+        "--refine-pad", "600", "--refine-min-match", "0.4",
+        "--refine-min-score", "0.5", "--refine-max-squashed", "2",
+        "--refine-max-crossing", "0",
+        "--enhance-vocals", "--karaoke-model", "my_karaoke.ckpt",
+        "--dereverb-model", "none",
+    ])
+
+    assert code == 0
+    opt = captured["options"]
+    rp = opt.refine_params
+    assert rp.model_name == "my/align-model"
+    assert rp.pad_ms == 600
+    assert rp.min_match_ratio == 0.4
+    assert rp.min_char_score == 0.5
+    assert rp.max_squashed_mid_chars == 2
+    assert rp.max_crossing_chars == 0
+    assert opt.enhance_karaoke_model == "my_karaoke.ckpt"
+    assert opt.enhance_dereverb_model is None  # 'none' で段をスキップ
+
+
+def test_analyze_rejects_invalid_refine_params(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    code = cli_mod.main([
+        "analyze", "song.wav", "-o", str(tmp_path / "out"), "--refine-min-score", "1.5",
+    ])
+
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "min_char_score" in captured.err
+    assert "Traceback" not in captured.err
+
+
 def _feed_input(monkeypatch, answers):
     """input() に answers を順に返させる。"""
     it = iter(answers)

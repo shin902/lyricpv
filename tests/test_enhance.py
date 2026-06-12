@@ -138,6 +138,38 @@ def test_pick_stem_ignores_input_filename_contamination(tmp_path):
     assert "(No Reverb)" in picked2.name
 
 
+def test_pipeline_passes_custom_enhance_models(fake_audio_separator, tmp_path, synth_wav_path, monkeypatch):
+    """PipelineOptions のモデル指定 (CLI の --karaoke-model 等) が enhance に届く。"""
+    import lyricpv.pipeline as pipeline_mod
+    from lyricpv.pipeline import PipelineOptions, run
+    from lyricpv.separate import SeparationResult
+
+    def fake_separate(wav_path, out_dir, *, model_name, device):
+        import shutil
+        from pathlib import Path
+
+        vocals = Path(out_dir) / "vocals.wav"
+        acc = Path(out_dir) / "accompaniment.wav"
+        shutil.copyfile(wav_path, vocals)
+        shutil.copyfile(wav_path, acc)
+        return SeparationResult(vocals, acc, 44_100, "cpu")
+
+    monkeypatch.setattr(pipeline_mod, "separate", fake_separate)
+
+    run(
+        str(synth_wav_path),
+        tmp_path / "out",
+        options=PipelineOptions(
+            lyrics_text="[00:01.00] 夜に駆ける\n",
+            enhance_vocals=True,
+            enhance_karaoke_model="my_karaoke_x.ckpt",
+            enhance_dereverb_model=None,  # 2 段目スキップ
+        ),
+    )
+    sep = fake_audio_separator.instances[0]
+    assert sep.loaded_models == ["my_karaoke_x.ckpt"]
+
+
 def test_pipeline_records_enhance_models_in_meta(fake_audio_separator, tmp_path, synth_wav_path, monkeypatch):
     """--enhance-vocals 相当のオプションで meta.json に使用モデルが残る。"""
     import json
