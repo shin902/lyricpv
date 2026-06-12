@@ -49,6 +49,10 @@ uv run lyricpv analyze "https://..." --vocaloid
 # 高品質分離(約4倍遅い) / デバイス強制
 uv run lyricpv analyze song.wav --model htdemucs_ft --device cpu
 
+# ボーカル強化: 分離ボーカルからハモリ・残響を除去して歌唱区間推定を安定させる
+# (重い処理のため既定 OFF。要: uv sync --extra enhance)
+uv run lyricpv analyze song.wav --enhance-vocals
+
 # 対話モード(YouTube の装飾タイトル/チャンネル名で歌詞検索が外れるとき)
 #   ・取得後に title/artist を確認・修正してから検索
 #   ・ヒットした歌詞の冒頭を表示し、違えば打ち直して再検索 (Y/n/r)

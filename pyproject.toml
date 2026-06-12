@@ -20,6 +20,10 @@ webui = [
     "fastapi>=0.115",
     "uvicorn>=0.32",
 ]
+# --enhance-vocals 用 (UVR 系モデルでハモリ・残響除去 / #3)
+enhance = [
+    "audio-separator>=0.30",
+]
 
 [dependency-groups]
 dev = [

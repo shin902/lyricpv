@@ -34,6 +34,10 @@ def main(argv: list[str] | None = None) -> int:
     p_analyze.add_argument("--model", default="htdemucs", help="分離モデル (htdemucs / htdemucs_ft)")
     p_analyze.add_argument("--device", default=None, choices=["mps", "cuda", "cpu"], help="計算デバイス (既定: 自動)")
     p_analyze.add_argument("--skip-separation", action="store_true", help="音源分離を省略する (高速・低品質)")
+    p_analyze.add_argument(
+        "--enhance-vocals", action="store_true",
+        help="分離ボーカルにハモリ・残響除去を掛ける (要: uv sync --extra enhance)",
+    )
 
     p_serve = sub.add_parser("serve", help="WebUI (解析フロントエンド) を起動する")
     p_serve.add_argument("--host", default="127.0.0.1")
@@ -51,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
+    from .enhance import EnhanceError
     from .fetch import FetchError, check_external_tools, extract_youtube_id, is_url
     from .pipeline import PipelineOptions, run
     from .separate import SeparationError
@@ -95,6 +100,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         separation_model=args.model,
         device=args.device,
         skip_separation=args.skip_separation,
+        enhance_vocals=args.enhance_vocals,
     )
 
     def progress(stage: str, message: str) -> None:
@@ -115,7 +121,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             on_metadata=on_metadata,
             on_lyrics_review=on_lyrics_review,
         )
-    except (FetchError, SeparationError) as e:
+    except (FetchError, SeparationError, EnhanceError) as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
     print(f"完了: {result.json_path} (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})")
