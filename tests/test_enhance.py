@@ -98,9 +98,9 @@ def test_enhance_with_no_models_raises(fake_audio_separator, tmp_path):
         enhance_vocals(_make_vocals(tmp_path), tmp_path, karaoke_model=None, dereverb_model=None)
 
 
-def test_enhance_without_dependency_raises_with_install_hint(tmp_path):
-    # audio-separator が import できない環境では導入方法を案内して失敗する
-    assert "audio_separator" not in sys.modules
+def test_enhance_without_dependency_raises_with_install_hint(tmp_path, monkeypatch):
+    # audio-separator がインストールされた環境でも import 失敗を確実に再現する
+    monkeypatch.setitem(sys.modules, "audio_separator", None)
     with pytest.raises(EnhanceError, match="--extra enhance"):
         enhance_vocals(_make_vocals(tmp_path), tmp_path)
 
