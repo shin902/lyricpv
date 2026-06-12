@@ -107,11 +107,13 @@ def _align_word_synced(lines: list[LyricLine], duration_ms: int) -> list[Phrase]
 def _align_plain(
     lines: list[LyricLine], duration_ms: int, amplitude: list[AmplitudePoint] | None
 ) -> list[Phrase]:
-    """T3/T4: 時刻なし。歌唱区間全体に行をモーラ数比で按分する粗いドラフト。
+    """T3/T4: 時刻なし。歌唱区間に行をモーラ数比で按分する粗いドラフト。
 
+    歌唱区間はエンベロープから複数の有声区間として検出し、間奏・前奏には
+    行を割り当てない (#3)。区間が取れない場合は全体スパン 1 区間に落ちる。
     精度は低い前提であり、後段の手動補正の叩き台に位置づけられる。
     """
-    span_start, span_end = _vocal_active_span(duration_ms, amplitude)
+    regions = _active_regions(duration_ms, amplitude)
 
     # 形態素が空の行 (記号のみ等) は按分対象から除外する。weights に残すと
     # その分のスパンが割り当て先のないまま隙間として残ってしまう。
@@ -120,14 +122,16 @@ def _align_plain(
         return []
     weights = [max(1, sum(m.mora_count for m in ms)) for _, ms in entries]
     total = sum(weights)
-    span = span_end - span_start
+    total_active = sum(e - s for s, e in regions)
 
     phrases: list[Phrase] = []
-    cursor = span_start
+    cursor = 0.0  # 有声区間を連結した時間軸上の位置 (間奏をスキップする)
     for (line, morphs), w in zip(entries, weights):
-        line_span = span * w / total
+        line_span = total_active * w / total
         sing_ms = max(200, int(line_span * 0.85))  # 残り 15% は行間の息継ぎ
-        phrases.append(_build_phrase(line.text, morphs, int(cursor), int(cursor) + sing_ms))
+        start = _to_real_time(cursor, regions, prefer_next_region=True)
+        end = max(start + 200, _to_real_time(cursor + sing_ms, regions))
+        phrases.append(_build_phrase(line.text, morphs, start, end))
         cursor += line_span
     return phrases
 
@@ -141,6 +145,53 @@ def _vocal_active_span(
         if len(active) >= 2:
             return active[0], min(active[-1] + 1000, duration_ms)
     return int(duration_ms * 0.1), int(duration_ms * 0.9)
+
+
+def _active_regions(
+    duration_ms: int,
+    amplitude: list[AmplitudePoint] | None,
+    threshold: float = 0.15,
+    max_gap_ms: int = 2000,
+    min_region_ms: int = 1000,
+) -> list[tuple[int, int]]:
+    """エンベロープから有声区間のリストを検出する。
+
+    threshold 以上の点を max_gap_ms 以内なら同一区間として連結し、
+    min_region_ms 未満の断片 (ノイズ・かすれ) は捨てる。検出できなければ
+    `_vocal_active_span` の全体スパン 1 区間にフォールバックする。
+    """
+    if amplitude:
+        active = [p.time for p in amplitude if p.value >= threshold]
+        regions: list[tuple[int, int]] = []
+        for t in active:
+            if regions and t - regions[-1][1] <= max_gap_ms:
+                regions[-1] = (regions[-1][0], t)
+            else:
+                regions.append((t, t))
+        # 区間末尾は最後の有声点で切れるため、減衰の分だけ少し余韻を持たせる
+        padded = [(s, min(e + 500, duration_ms)) for s, e in regions]
+        filtered = [(s, e) for s, e in padded if e - s >= min_region_ms]
+        if filtered:
+            return filtered
+    return [_vocal_active_span(duration_ms, amplitude)]
+
+
+def _to_real_time(
+    active_ms: float, regions: list[tuple[int, int]], *, prefer_next_region: bool = False
+) -> int:
+    """有声区間を連結した時間軸上の位置を実時刻 (ms) へ写像する。
+
+    区間の継ぎ目ちょうどの位置は、行の開始 (prefer_next_region=True) なら
+    次区間の頭へ、行の終了なら前区間の末尾へ寄せる。これで間奏明けの行が
+    前区間の末尾に張り付くのを防ぐ。
+    """
+    remaining = active_ms
+    for s, e in regions:
+        span = e - s
+        if remaining < span or (remaining == span and not prefer_next_region):
+            return int(s + remaining)
+        remaining -= span
+    return regions[-1][1]
 
 
 def _build_phrase(text: str, morphs: list[MorphWord], start: int, end: int) -> Phrase:
