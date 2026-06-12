@@ -44,6 +44,23 @@ sdk/lyric-player.mjs   契約B: ランタイム SDK(依存ゼロ ES module)
 - 丸ごと失敗した場合は CPU で 1 回リトライ
 - `--model htdemucs_ft` で品質優先(約4倍遅)に切り替え可能
 
+#### 2a. 改訂(#3): opt-in のボーカル強化 2 段パイプラインを追加
+
+**判断の変更**: 「RoFormer 不要」は *既定経路* については維持するが、サビのハモリ・エコーが声量ベースの歌唱区間推定を膨らませる問題(#3)への対症として、Demucs の vocals に対する**任意の後段処理**を `enhance.py` に追加した。Demucs の置き換えではない。
+
+- `--enhance-vocals`(extra: `enhance` = audio-separator)で有効化。既定 OFF(モデル DL と推論が重い)
+- 1 段目: Mel-Band RoFormer カラオケ系モデルでリードボーカル抽出(ハモリ除去)
+- 2 段目: DeEcho/DeReverb 系モデルで残響除去
+- 使用モデルは `meta.json` の `enhanceModels` に記録(再現性のため)
+- モデルの優劣(特に日本語ポップス)は流動的なので、既定モデルは `audio-separator --list_models` を見て差し替えてよい
+
+あわせて声量エンベロープを用途別に分離した:
+
+- `amplitude`(契約A): 生の RMS。SDK の `getVocalAmplitude()`(演出用)の意味を保つためゲートを掛けない
+- `vocal_activity`(契約A 外・内部用): オンセット減衰ゲート済み。エコー/ハモリの余韻は新たな立ち上がりを持たない性質を使って尾を抑え、`align()` の歌唱区間推定にだけ使う
+
+T3(プレーン歌詞)の按分も「全体スパン両端のみ」から「有声区間リストへの配分(間奏スキップ)」に変更し、エンベロープが実際に行配置へ効くようにした。
+
 ### 3. 読み取得: pyopenjtalk → fugashi + unidic-lite
 
 **判断**: pyopenjtalk はビルド依存(cmake 等)があり導入が重い。UniDic の仮名読みフィールドからモーラを数える方式なら純 Python 依存で済み、モーラ按分には十分な精度。
@@ -96,3 +113,4 @@ source(URL/ファイル)
 - コードはトライアド 24 種のみ(7th 等は最近傍のトライアドに丸まる)
 - 歌詞検索のカバレッジは syncedlyrics のプロバイダ依存(ボカロは `--vocaloid` で NetEase 優先)
 - YouTube IFrame 同期アダプタ・MP4 書き出しは未実装(`manualClockAdapter` がフレーム逐次レンダリングの土台)
+- T1/T2 の行内按分は依然モーラ比の推定(#3 の強化が効くのは声量を使う T3 経路のみ)。同期精度の根本解決は forced alignment(WhisperX / 日本語 CTC aligner)の導入で、契約A は不変のまま `align()` の按分を実測の音素時刻に差し替えられる(#3・#6 の本命)
