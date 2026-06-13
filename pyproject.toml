@@ -22,7 +22,7 @@ webui = [
 ]
 # --enhance-vocals 用 (UVR 系モデルでハモリ・残響除去 / #3)
 enhance = [
-    "audio-separator>=0.30",
+    "audio-separator[cpu]>=0.30",
 ]
 # --refine-align 用 (whisperx の CTC 強制アラインメント / #3, #6)
 refine = [
