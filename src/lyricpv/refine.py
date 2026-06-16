@@ -285,11 +285,13 @@ def _apply_char_times(
             matched += 1
 
     # 行中間の潰れが多い行は CTC パスの崩壊 (一部の文字を数十 ms 間隔で
-    # 埋めただけの状態)。残った実測も信用できないため行ごと棄却する
-    if squashed_mid > params.max_squashed_mid_chars:
+    # 埋めただけの状態)。残った実測も信用できないため行ごと棄却する。
+    # 長い行ほど潰れが出やすいため、歌唱文字数に比例した閾値を使う
+    squash_limit = max(params.max_squashed_mid_chars, n_sung // 6)
+    if squashed_mid > squash_limit:
         logger.debug(
-            "棄却 [squashed_mid=%d > %d]: %s",
-            squashed_mid, params.max_squashed_mid_chars, phrase.text,
+            "棄却 [squashed_mid=%d > %d (n_sung=%d)]: %s",
+            squashed_mid, squash_limit, n_sung, phrase.text,
         )
         return False
     min_needed = max(1, int(n_sung * params.min_match_ratio))
