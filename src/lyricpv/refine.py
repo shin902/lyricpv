@@ -287,12 +287,25 @@ def _apply_char_times(
     # 行中間の潰れが多い行は CTC パスの崩壊 (一部の文字を数十 ms 間隔で
     # 埋めただけの状態)。残った実測も信用できないため行ごと棄却する
     if squashed_mid > params.max_squashed_mid_chars:
+        logger.debug(
+            "棄却 [squashed_mid=%d > %d]: %s",
+            squashed_mid, params.max_squashed_mid_chars, phrase.text,
+        )
         return False
-    if matched < max(1, int(n_sung * params.min_match_ratio)):
+    min_needed = max(1, int(n_sung * params.min_match_ratio))
+    if matched < min_needed:
+        logger.debug(
+            "棄却 [match=%d/%d < %d (%.0f%%)]: %s",
+            matched, n_sung, min_needed, params.min_match_ratio * 100, phrase.text,
+        )
         return False
 
     first_matched = next(t for t in times if t)
     if window_start is not None and first_matched[0] <= window_start + _EDGE_EPS_MS:
+        logger.debug(
+            "棄却 [edge_eps: first=%dms <= window_start+eps=%dms]: %s",
+            first_matched[0], window_start + _EDGE_EPS_MS, phrase.text,
+        )
         return False
 
     # CTC は行末の無音を最後の文字の終了時刻に吸収させるため上限で切り詰める
@@ -303,6 +316,10 @@ def _apply_char_times(
     filled = _fill_gaps(times)
     filled = _enforce_monotonic(filled)
     if filled[0][0] < min_start:
+        logger.debug(
+            "棄却 [min_start: filled[0]=%dms < min_start=%dms]: %s",
+            filled[0][0], min_start, phrase.text,
+        )
         return False
 
     # 次行の頭を追い越す文字が多い行は、応答 (コーラス) が次行に重なって
@@ -311,8 +328,16 @@ def _apply_char_times(
     if next_start is not None:
         crossing = sum(1 for s, _ in filled if s > next_start)
         if crossing > params.max_crossing_chars:
+            logger.debug(
+                "棄却 [crossing=%d > %d, next_start=%dms]: %s",
+                crossing, params.max_crossing_chars, next_start, phrase.text,
+            )
             return False
 
+    logger.debug(
+        "補正 [match=%d/%d, squashed_mid=%d]: %s",
+        matched, n_sung, squashed_mid, phrase.text,
+    )
     k = 0
     for w in phrase.words:
         for c in w.chars:
