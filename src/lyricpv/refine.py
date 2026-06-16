@@ -324,17 +324,26 @@ def _apply_char_times(
         )
         return False
 
-    # 次行の頭を追い越す文字が多い行は、応答 (コーラス) が次行に重なって
-    # 歌われている。追い越し分は _clamp_tail で次行頭に潰されて表示され
-    # なくなるため、行窓内に按分する従来表示の方が安定する → 棄却
+    # 次行の頭を追い越す文字は next_start に clamp する。大半が追い越す行は
+    # CTC パスが行窓からずれている (コーラス重なり等) ため棄却する
     if next_start is not None:
         crossing = sum(1 for s, _ in filled if s > next_start)
-        if crossing > params.max_crossing_chars:
+        n_filled = len(filled)
+        if crossing > n_filled // 2:
             logger.debug(
-                "棄却 [crossing=%d > %d, next_start=%dms]: %s",
-                crossing, params.max_crossing_chars, next_start, phrase.text,
+                "棄却 [crossing=%d > %d (半数超), next_start=%dms]: %s",
+                crossing, n_filled // 2, next_start, phrase.text,
             )
             return False
+        if crossing > 0:
+            logger.debug(
+                "clamp [crossing=%d, next_start=%dms]: %s",
+                crossing, next_start, phrase.text,
+            )
+            for ci in range(n_filled):
+                s, e = filled[ci]
+                if s > next_start:
+                    filled[ci] = (next_start, max(next_start + 1, e))
 
     logger.debug(
         "補正 [match=%d/%d, squashed_mid=%d]: %s",
