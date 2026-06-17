@@ -118,16 +118,16 @@ def refine_phrases(
     phrases: list[Phrase],
     vocals_path: str | Path,
     *,
-    device: str | None = None,
     params: RefineParams | None = None,
 ) -> RefineResult:
     """phrases の word/char 時刻を whisperx の実測値で上書きする (in place)。
 
     行単位で独立に補正し、マッチ率が低い行・縮退した行は按分値のまま残すため、
     間奏の誤検出や歌詞テキストと歌唱の不一致 (ラララ等) に対して安全側に倒れる。
+    whisperx/wav2vec2 の MPS 実行は不安定なため、常に CPU で実行する。
     """
     whisperx = _import_whisperx()
-    dev = device or "cpu"
+    dev = "cpu"
     params = params or RefineParams()
 
     if not phrases:

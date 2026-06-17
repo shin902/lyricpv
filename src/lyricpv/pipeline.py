@@ -194,9 +194,7 @@ def run(
             report("refine", "歌詞が無いため強制アラインメントをスキップします")
         else:
             report("refine", "強制アラインメント (whisperx) で時刻を補正しています")
-            rr = refine_phrases(
-                phrases, vocals_path, device=options.device, params=options.refine_params
-            )
+            rr = refine_phrases(phrases, vocals_path, params=options.refine_params)
             refine_model = rr.model
             refined_phrases = rr.refined_count
             report("refine", f"補正完了 ({rr.refined_count}/{rr.total} 行)")
