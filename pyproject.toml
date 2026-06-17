@@ -20,6 +20,14 @@ webui = [
     "fastapi>=0.115",
     "uvicorn>=0.32",
 ]
+# --enhance-vocals 用 (UVR 系モデルでハモリ・残響除去 / #3)
+enhance = [
+    "audio-separator[cpu]>=0.30",
+]
+# --refine-align 用 (whisperx の CTC 強制アラインメント / #3, #6)
+refine = [
+    "whisperx>=3.1",
+]
 
 [dependency-groups]
 dev = [

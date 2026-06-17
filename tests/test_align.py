@@ -2,7 +2,14 @@
 
 from unittest.mock import patch
 
-from lyricpv.lyrics.align import _MAX_MS_PER_MORA, _TYPICAL_MS_PER_MORA, _align_plain, _vocal_active_span, align
+from lyricpv.lyrics.align import (
+    _MAX_MS_PER_MORA,
+    _TYPICAL_MS_PER_MORA,
+    _active_regions,
+    _align_plain,
+    _vocal_active_span,
+    align,
+)
 from lyricpv.lyrics.lrc import LyricLine, parse_lrc
 from lyricpv.lyrics.morph import MorphWord, analyze_line
 from lyricpv.schema import AmplitudePoint
@@ -62,6 +69,43 @@ def test_plain_text_uses_amplitude_span():
     # 歌唱開始 (20 秒) より前に歌詞が置かれない
     assert phrases[0].start_time >= 20_000
     _assert_hierarchy_consistent(phrases)
+
+
+def test_plain_text_skips_interlude_between_active_regions():
+    """有声区間が 2 つに割れている場合、行は間奏を避けて配置される (#3)。"""
+    lines = parse_lrc("一行目の歌詞\n二行目の歌詞\n")
+    # 10–30 秒と 60–80 秒だけ有声、その間は間奏 (無音)
+    amplitude = [
+        AmplitudePoint(time=t, value=0.8 if 10_000 <= t < 30_000 or 60_000 <= t < 80_000 else 0.0)
+        for t in range(0, 100_000, 500)
+    ]
+    phrases = align(lines, 100_000, amplitude)
+    assert len(phrases) == 2
+    # モーラ数が同じ 2 行なので、1 行目は前半区間、2 行目は後半区間に収まる
+    assert 10_000 <= phrases[0].start_time < 30_500
+    assert 60_000 <= phrases[1].start_time < 80_500
+    _assert_hierarchy_consistent(phrases)
+
+
+def test_active_regions_merges_short_gaps_and_drops_blips():
+    duration = 100_000
+    points = (
+        # 息継ぎ程度 (1 秒) のギャップを挟む本体区間 → 1 区間にマージされる
+        [AmplitudePoint(time=t, value=0.8) for t in range(10_000, 15_000, 500)]
+        + [AmplitudePoint(time=t, value=0.8) for t in range(16_000, 20_000, 500)]
+        # 500ms だけの孤立した断片 → ノイズとして捨てられる
+        + [AmplitudePoint(time=t, value=0.8) for t in range(50_000, 50_500, 100)]
+    )
+    regions = _active_regions(duration, points)
+    assert len(regions) == 1
+    start, end = regions[0]
+    assert start == 10_000
+    assert 19_500 <= end <= 20_500
+
+
+def test_active_regions_falls_back_to_span_without_amplitude():
+    duration = 100_000
+    assert _active_regions(duration, None) == [_vocal_active_span(duration, None)]
 
 
 def test_empty_lines_return_empty():

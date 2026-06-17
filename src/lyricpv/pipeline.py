@@ -21,10 +21,12 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 from . import music_map
+from .enhance import DEFAULT_DEREVERB_MODEL, DEFAULT_KARAOKE_MODEL, enhance_vocals
 from .fetch import FetchResult, fetch_youtube, import_file, is_url
 from .lyrics.align import align
 from .lyrics.fetch import fetch_lyrics
 from .lyrics.lrc import LyricLine, is_word_synced, parse_lrc
+from .refine import RefineParams, refine_phrases
 from .schema import LyricData, SongMeta, SongSource
 from .separate import separate
 
@@ -68,6 +70,17 @@ class PipelineOptions:
     separation_model: str = "htdemucs"
     device: str | None = None  # None = 自動 (MPS 優先)
     skip_separation: bool = False  # テスト・高速試行用
+    # 分離ボーカルにハモリ除去・残響除去を掛ける (#3)。重い処理かつ
+    # audio-separator (extra: enhance) が必要なため既定 OFF
+    enhance_vocals: bool = False
+    # enhance の各段で使うモデル (None でその段をスキップ)
+    enhance_karaoke_model: str | None = DEFAULT_KARAOKE_MODEL
+    enhance_dereverb_model: str | None = DEFAULT_DEREVERB_MODEL
+    # 強制アラインメント (whisperx) で word/char 時刻を実測値に補正する (#3, #6)。
+    # モデル DL と推論が重く whisperx (extra: refine) が必要なため既定 OFF
+    refine_align: bool = False
+    # refine の調整パラメータ (CLI の --refine-* から上書き)
+    refine_params: RefineParams = field(default_factory=RefineParams)
 
 
 @dataclass
@@ -133,6 +146,7 @@ def run(
     # ③ 分離 (MPS)
     vocals_path = None
     device_used = "none"
+    enhance_models: list[str] = []
     if not options.skip_separation:
         report("separate", f"音源分離を実行しています (モデル: {options.separation_model})")
         sep = separate(
@@ -145,13 +159,45 @@ def run(
         device_used = sep.device_used
         report("separate", f"分離完了 (デバイス: {device_used})")
 
+        # ③' ボーカル強化 (opt-in): ハモリ・残響を除去し歌唱区間推定を安定させる (#3)
+        if options.enhance_vocals:
+            report("enhance", "ボーカル強化 (ハモリ・残響除去) を実行しています")
+            enhanced = enhance_vocals(
+                vocals_path,
+                out_dir,
+                karaoke_model=options.enhance_karaoke_model,
+                dereverb_model=options.enhance_dereverb_model,
+            )
+            vocals_path = enhanced.vocals_path
+            enhance_models = enhanced.models_used
+            report("enhance", f"強化完了 (モデル: {', '.join(enhance_models)})")
+    elif options.enhance_vocals:
+        report("enhance", "skip_separation のためボーカル強化をスキップします")
+
     # ④ 楽曲地図
     report("music_map", "ビート・構造・コード・声量を解析しています")
     mm = music_map.analyze(fetched.wav_path, vocals_path)
 
     # ⑤ 整合 (モーラ按分)
+    # 声量 (amplitude) ではなくオンセットゲート済みの歌唱活動度を渡す。
+    # エコー・ハモリの余韻で歌唱区間が膨らむのを抑えるため (#3)
     report("align", "歌詞タイミングを按分しています")
-    phrases = align(lines, fetched.duration_ms, mm.amplitude)
+    phrases = align(lines, fetched.duration_ms, mm.vocal_activity or mm.amplitude)
+
+    # ⑤' 強制アラインメント補正 (opt-in): 行内の按分時刻を CTC の実測値に置き換える
+    refine_model = None
+    refined_phrases = 0
+    if options.refine_align:
+        if vocals_path is None:
+            report("refine", "分離ボーカルが無いため強制アラインメントをスキップします")
+        elif not phrases:
+            report("refine", "歌詞が無いため強制アラインメントをスキップします")
+        else:
+            report("refine", "強制アラインメント (whisperx) で時刻を補正しています")
+            rr = refine_phrases(phrases, vocals_path, params=options.refine_params)
+            refine_model = rr.model
+            refined_phrases = rr.refined_count
+            report("refine", f"補正完了 ({rr.refined_count}/{rr.total} 行)")
 
     # ⑥ 契約A JSON へ規格化
     report("save", "TextAlive 互換 JSON を書き出しています")
@@ -182,6 +228,20 @@ def run(
         "deviceUsed": device_used,
         "tempoBpm": round(mm.tempo_bpm, 1),
         "separationModel": None if options.skip_separation else options.separation_model,
+        "enhanceModels": enhance_models or None,
+        "refineModel": refine_model,
+        "refinedPhrases": refined_phrases or None,
+        # 再現性のため、補正に効いたパラメータも記録する
+        "refineParams": (
+            {
+                "padMs": options.refine_params.pad_ms,
+                "minMatchRatio": options.refine_params.min_match_ratio,
+                "minCharScore": options.refine_params.min_char_score,
+                "maxSquashedMidChars": options.refine_params.max_squashed_mid_chars,
+            }
+            if refine_model
+            else None
+        ),
     }
     (out_dir / META_FILENAME).write_text(
         json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8"
