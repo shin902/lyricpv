@@ -153,6 +153,12 @@ def refine_phrases(
         raise RefineError(f"強制アラインメントに失敗しました: {e}") from e
 
     aligned_segments = result.get("segments", [])
+    if len(aligned_segments) != len(phrases):
+        logger.warning(
+            "whisperx の返り行数 (%d) が入力行数 (%d) と一致しません。末尾の行が未補正のまま残ります",
+            len(aligned_segments),
+            len(phrases),
+        )
     refined = 0
     prev_start = 0
     prev_phrase: Phrase | None = None
