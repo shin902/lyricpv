@@ -55,7 +55,6 @@ def test_analyze_passes_tuning_flags_to_pipeline(monkeypatch, tmp_path):
         "--refine-align", "--refine-model", "my/align-model",
         "--refine-pad", "600", "--refine-min-match", "0.4",
         "--refine-min-score", "0.5", "--refine-max-squashed", "2",
-        "--refine-max-crossing", "0",
         "--enhance-vocals", "--karaoke-model", "my_karaoke.ckpt",
         "--dereverb-model", "none",
     ])
@@ -68,7 +67,6 @@ def test_analyze_passes_tuning_flags_to_pipeline(monkeypatch, tmp_path):
     assert rp.min_match_ratio == 0.4
     assert rp.min_char_score == 0.5
     assert rp.max_squashed_mid_chars == 2
-    assert rp.max_crossing_chars == 0
     assert opt.enhance_karaoke_model == "my_karaoke.ckpt"
     assert opt.enhance_dereverb_model is None  # 'none' で段をスキップ
 

@@ -240,7 +240,6 @@ def run(
                 "minMatchRatio": options.refine_params.min_match_ratio,
                 "minCharScore": options.refine_params.min_char_score,
                 "maxSquashedMidChars": options.refine_params.max_squashed_mid_chars,
-                "maxCrossingChars": options.refine_params.max_crossing_chars,
             }
             if refine_model
             else None

@@ -60,7 +60,7 @@ uv run lyricpv analyze song.wav --refine-align
 # 補正のチューニング(既定値は実曲の実測分布から決定。詳細: --help)
 #   --refine-pad          行窓の探索パディング ms(LRC が全体的にずれている曲は広げる)
 #   --refine-min-score    潰れ実測を捨てる文字スコア閾値 / --refine-min-match 行の最低マッチ率
-#   --refine-max-squashed 崩壊判定(超えた行は按分のまま) / --refine-max-crossing 次行追い越し許容文字数
+#   --refine-max-squashed 崩壊判定(超えた行は按分のまま)
 uv run lyricpv analyze song.wav --refine-align --refine-pad 600 --refine-max-squashed 2
 
 # enhance のモデル差し替え('none' で段をスキップ。一覧: uv run audio-separator --list_models)

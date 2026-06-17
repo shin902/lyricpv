@@ -82,12 +82,6 @@ class RefineParams:
     # CTC パスの崩壊 (文字が数十 ms 間隔で流れる) とみなし按分のまま残す
     max_squashed_mid_chars: int = 1
 
-    # 次行の頭を追い越してよい文字数。これを超える行は按分のまま残す。
-    # コール&レスポンスの応答がメインボーカルに重なって次行へ流れ込む行
-    # (実データの「（フリはもうできない）」) は、実測を切り詰めると応答の
-    # 後半が表示されなくなるため、行窓内に按分する従来表示の方が安定する
-    max_crossing_chars: int = 1
-
     def __post_init__(self) -> None:
         if not self.model_name:
             raise ValueError("refine のモデル名 (model_name) が空です")
@@ -100,10 +94,6 @@ class RefineParams:
         if self.max_squashed_mid_chars < 0:
             raise ValueError(
                 f"max_squashed_mid_chars は 0 以上で指定してください: {self.max_squashed_mid_chars}"
-            )
-        if self.max_crossing_chars < 0:
-            raise ValueError(
-                f"max_crossing_chars は 0 以上で指定してください: {self.max_crossing_chars}"
             )
 
 
@@ -247,7 +237,7 @@ def _apply_char_times(
       マッチ率が min_match_ratio 未満 / 行中間の潰れ実測が
       max_squashed_mid_chars 超 / 補正後の行頭が前の行 (min_start) より前 /
       実測が探索窓の先頭 (window_start) に張り付いている (縮退) /
-      次行の頭 (next_start) を追い越す文字が max_crossing_chars 超
+      次行の頭 (next_start) を追い越す文字が半数を超える
     """
     params = params or RefineParams()
     flat = [c for w in phrase.words for c in w.chars]
@@ -324,8 +314,9 @@ def _apply_char_times(
         )
         return False
 
-    # 次行の頭を追い越す文字は next_start に clamp する。大半が追い越す行は
-    # CTC パスが行窓からずれている (コーラス重なり等) ため棄却する
+    # 次行の頭を追い越す文字は next_start に clamp する。半数超が追い越す行は
+    # CTC パスが行窓からずれている (コーラス重なり等) ため棄却する。
+    # しきい値は固定 (n_filled // 2) で、行ごとに調整可能なパラメータは持たない
     if next_start is not None:
         crossing = sum(1 for s, _ in filled if s > next_start)
         n_filled = len(filled)

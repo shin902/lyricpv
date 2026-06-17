@@ -71,10 +71,6 @@ def main(argv: list[str] | None = None) -> int:
         "--refine-max-squashed", type=int, default=None, metavar="N",
         help="行中間で許容する潰れ実測の数。超えた行は按分のまま (既定: 1)",
     )
-    p_analyze.add_argument(
-        "--refine-max-crossing", type=int, default=None, metavar="N",
-        help="次行の頭を追い越してよい文字数。超えた行は按分のまま (既定: 1)",
-    )
 
     p_serve = sub.add_parser("serve", help="WebUI (解析フロントエンド) を起動する")
     p_serve.add_argument("--host", default="127.0.0.1")
@@ -137,7 +133,6 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         "min_match_ratio": args.refine_min_match,
         "min_char_score": args.refine_min_score,
         "max_squashed_mid_chars": args.refine_max_squashed,
-        "max_crossing_chars": args.refine_max_crossing,
     }
     try:
         refine_params = RefineParams(
