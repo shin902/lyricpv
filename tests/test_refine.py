@@ -210,27 +210,29 @@ def test_apply_char_times_rejects_collapsed_path():
 
 
 def test_apply_char_times_rejects_heavy_crossing_into_next_phrase():
-    """次行の頭を追い越す文字が多い行 (コール&レスポンスの応答が次行に
-    重なって歌われる行) は、切り詰めると後半が表示されなくなるため棄却する。"""
+    """次行の頭を追い越す文字が半数を超える行 (コール&レスポンスの応答が
+    次行に重なって歌われる行) は、CTC パスが行窓からずれているとみなして棄却する。"""
     p = make_phrase(["はい", "そう"], 10_000, 12_000)
     before = [(c.start_time, c.end_time) for c in flat_chars(p)]
     aligned = [
         AlignedChar("は", 10_100, 10_300, score=0.9),
-        AlignedChar("い", 10_400, 10_600, score=0.9),
-        AlignedChar("そ", 12_300, 12_500, score=0.9),  # 次行 (12_000) を追い越し
-        AlignedChar("う", 12_500, 12_700, score=0.9),  # 同上
+        AlignedChar("い", 12_300, 12_500, score=0.9),  # 次行 (12_000) を追い越し
+        AlignedChar("そ", 12_500, 12_700, score=0.9),  # 同上
+        AlignedChar("う", 12_700, 12_900, score=0.9),  # 同上 (4 文字中 3 文字 = 半数超)
     ]
     assert not _apply_char_times(p, aligned, next_start=12_000)
     assert [(c.start_time, c.end_time) for c in flat_chars(p)] == before
 
-    # 追い越しが許容数 (既定 1 文字) 以内なら採用される
+    # 追い越しが半数以下なら採用し、追い越した文字は next_start に clamp する
     aligned_ok = [
         AlignedChar("は", 10_100, 10_300, score=0.9),
         AlignedChar("い", 10_400, 10_600, score=0.9),
-        AlignedChar("そ", 11_300, 11_500, score=0.9),
-        AlignedChar("う", 12_300, 12_500, score=0.9),  # 1 文字だけ追い越し
+        AlignedChar("そ", 12_300, 12_500, score=0.9),  # 追い越し (4 文字中 2 文字 = 半数)
+        AlignedChar("う", 12_500, 12_700, score=0.9),  # 同上
     ]
     assert _apply_char_times(p, aligned_ok, next_start=12_000)
+    # 追い越した「そ」「う」の開始は next_start (12_000) に切り詰められる
+    assert [c.start_time for c in flat_chars(p)] == [10_100, 10_400, 12_000, 12_000]
 
 
 def test_refine_params_can_loosen_collapse_threshold():
