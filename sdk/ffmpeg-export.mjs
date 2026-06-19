@@ -41,6 +41,7 @@ function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } =
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      proc.stderr.removeAllListeners("data");
       fn();
     };
     const timer = setTimeout(() => {

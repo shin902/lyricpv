@@ -110,11 +110,12 @@ interface AudioAdapter {
 ffmpeg / ffprobe が PATH にあることを前提とする。
 
 ```js
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createCanvas } from "canvas"; // npm: node-canvas (このSDKの依存ではなく利用者側で追加する)
 import { Player, manualClockAdapter } from "./lyric-player.mjs";
 import { exportFramesToMp4 } from "./ffmpeg-export.mjs";
 
+const json = JSON.parse(readFileSync("lyric_data.json", "utf8")); // 契約A (lyricpv analyze の出力)
 const player = new Player();
 const clock = manualClockAdapter(json.song.durationMs);
 await player.load(json, clock);
