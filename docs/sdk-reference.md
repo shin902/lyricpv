@@ -110,6 +110,8 @@ interface AudioAdapter {
 ffmpeg / ffprobe が PATH にあることを前提とする。
 
 ```js
+import { writeFileSync } from "node:fs";
+import { createCanvas } from "canvas"; // npm: node-canvas (このSDKの依存ではなく利用者側で追加する)
 import { Player, manualClockAdapter } from "./lyric-player.mjs";
 import { exportFramesToMp4 } from "./ffmpeg-export.mjs";
 
@@ -117,14 +119,20 @@ const player = new Player();
 const clock = manualClockAdapter(json.song.durationMs);
 await player.load(json, clock);
 
+const canvas = createCanvas(1920, 1080);
+const ctx = canvas.getContext("2d");
+
 await exportFramesToMp4(player, clock, {
   fps: 30,
   framePattern: "out/frame-%05d.png",
   audioPath: "master.wav",
   outPath: "out.mp4",
   writeFrame: ({ index, ms }) => {
-    render(ms); // Canvas に描画
-    savePng(`out/frame-${String(index).padStart(5, "0")}.png`); // ピクセル保存はあなたの実装
+    const char = player.currentChar(ms);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (char) ctx.fillText(char.char, canvas.width / 2, canvas.height / 2); // 描画はあなたの実装
+    const path = `out/frame-${String(index).padStart(5, "0")}.png`;
+    writeFileSync(path, canvas.toBuffer("image/png")); // ピクセル保存もあなたの実装(ここでは node-canvas の例)
   },
 });
 ```
