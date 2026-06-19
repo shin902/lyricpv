@@ -21,7 +21,11 @@ export function frameTimestamps(durationMs, fps) {
   const totalFrames = Math.ceil(durationMs / frameDurationMs) + 1;
   const timestamps = [];
   for (let index = 0; index < totalFrames; index += 1) {
-    timestamps.push(Math.min(Math.round(index * frameDurationMs), durationMs));
+    const ms = Math.min(Math.round(index * frameDurationMs), durationMs);
+    timestamps.push(ms);
+    // 浮動小数点誤差で round() が durationMs に複数回到達することがあるため、
+    // 到達した時点で打ち切り、末尾の重複フレームを防ぐ
+    if (ms >= durationMs) break;
   }
   return timestamps;
 }

@@ -32,6 +32,15 @@ test("frameTimestamps: fps が不正なら例外", () => {
   assert.throws(() => frameTimestamps(100, -1));
 });
 
+test("frameTimestamps: 浮動小数点誤差で末尾フレームが重複しない", () => {
+  // durationMs/frameDurationMs が割り切れず round() が durationMs に複数回到達しうる組み合わせ
+  for (const [durationMs, fps] of [[667, 3], [167, 6], [143, 7], [100, 30]]) {
+    const timestamps = frameTimestamps(durationMs, fps);
+    assert.equal(timestamps.at(-1), durationMs);
+    assert.notEqual(timestamps.at(-2), timestamps.at(-1), `dup at duration=${durationMs} fps=${fps}`);
+  }
+});
+
 test("renderFrames: 各フレームで clock を seek し timeupdate 順に onFrame が呼ばれる", async () => {
   const player = new Player();
   const clock = manualClockAdapter(100);
