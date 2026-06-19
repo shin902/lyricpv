@@ -77,6 +77,42 @@ test("muxFramesToMp4: ffmpeg が非0終了したら FfmpegExportError を投げ�
   }
 });
 
+test("muxFramesToMp4: 大量の stderr 出力でも末尾のみ保持しエラーメッセージが膨張しない", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ffmpeg-export-test-"));
+  try {
+    const scriptPath = join(dir, "stub-ffmpeg-noisy.sh");
+    // 1 行 100 文字 x 1000 行 (=約100KB) の進捗ログ風 stderr を吐いて失敗するスタブ
+    const script = `#!/bin/sh
+i=0
+while [ "$i" -lt 1000 ]; do
+  printf '%s\\n' "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" >&2
+  i=$((i + 1))
+done
+exit 1
+`;
+    await writeFile(scriptPath, script);
+    await chmod(scriptPath, 0o755);
+
+    await assert.rejects(
+      () => muxFramesToMp4({
+        framePattern: "frames/frame-%05d.png",
+        fps: 24,
+        audioPath: "master.wav",
+        outPath: "out.mp4",
+        ffmpegPath: scriptPath,
+      }),
+      (err) => {
+        assert.ok(err instanceof FfmpegExportError);
+        // エラーメッセージは stderr 末尾 500 文字程度に収まる(無制限蓄積していない)
+        assert.ok(err.message.length < 1000, `message too long: ${err.message.length}`);
+        return true;
+      }
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("exportFramesToMp4: renderFrames で writeFrame を全フレーム呼び、その後 muxFramesToMp4 相当の ffmpeg 呼び出しを行う", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ffmpeg-export-test-"));
   try {

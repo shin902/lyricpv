@@ -31,6 +31,9 @@ function assertSafeArg(value, label) {
   }
 }
 
+/** エラーメッセージに含める stderr の末尾保持量。 */
+const STDERR_TAIL_LIMIT = 4000;
+
 function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } = {}) {
   assertSafeArg(ffmpegPath, "ffmpegPath");
   return new Promise((resolve, reject) => {
@@ -50,6 +53,10 @@ function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } =
     }, timeoutMs);
     proc.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
+      // 長時間のエンコードで進捗ログが大量に出ても無制限に蓄積しないよう、末尾のみ保持する
+      if (stderr.length > STDERR_TAIL_LIMIT) {
+        stderr = stderr.slice(-STDERR_TAIL_LIMIT);
+      }
     });
     proc.on("error", (err) => {
       settle(() => reject(new FfmpegExportError(`ffmpeg の起動に失敗しました: ${err.message}`)));
