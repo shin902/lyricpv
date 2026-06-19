@@ -49,23 +49,26 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
   };
 
   return new Promise((resolve, reject) => {
-    let failed = false;
+    let settled = false;
+    const settle = (fn) => {
+      if (settled) return;
+      settled = true;
+      fn();
+    };
 
     recorder.onerror = (event) => {
-      failed = true;
-      reject(event.error ?? new StreamExportError("MediaRecorder でエラーが発生しました"));
+      settle(() => reject(event.error ?? new StreamExportError("MediaRecorder でエラーが発生しました")));
     };
     recorder.onstop = () => {
-      if (!failed) resolve(new Blob(chunks, { type: recorder.mimeType }));
+      settle(() => resolve(new Blob(chunks, { type: recorder.mimeType })));
     };
 
     recorder.start();
     renderFrames(player, clock, { fps, onFrame: pacedOnFrame })
       .then(() => recorder.stop())
       .catch((err) => {
-        failed = true;
         recorder.stop();
-        reject(err);
+        settle(() => reject(err));
       });
   });
 }
