@@ -21,7 +21,7 @@ export function frameTimestamps(durationMs, fps) {
   const totalFrames = Math.ceil(durationMs / frameDurationMs) + 1;
   const timestamps = [];
   for (let index = 0; index < totalFrames; index += 1) {
-    timestamps.push(Math.min(index * frameDurationMs, durationMs));
+    timestamps.push(Math.min(Math.round(index * frameDurationMs), durationMs));
   }
   return timestamps;
 }

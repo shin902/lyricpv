@@ -17,28 +17,50 @@ import { renderFrames } from "./frame-driver.mjs";
 
 export class FfmpegExportError extends Error {}
 
+/**
+ * ffmpeg に渡す文字列引数(パス・パターン)を検証する。
+ * spawn() は配列引数のためシェルインジェクションは起きないが、
+ * "-" で始まる値は ffmpeg にオプションとして解釈されうる(引数インジェクション)。
+ */
+function assertSafeArg(value, label) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new FfmpegExportError(`${label} は空でない文字列を指定してください`);
+  }
+  if (value.startsWith("-")) {
+    throw new FfmpegExportError(`${label} に "-" で始まる値は指定できません (ffmpeg オプションとして解釈される可能性があります): ${value}`);
+  }
+}
+
 function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } = {}) {
+  assertSafeArg(ffmpegPath, "ffmpegPath");
   return new Promise((resolve, reject) => {
     const proc = spawn(ffmpegPath, args);
     let stderr = "";
+    let settled = false;
+    const settle = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
     const timer = setTimeout(() => {
       proc.kill("SIGKILL");
-      reject(new FfmpegExportError(`ffmpeg がタイムアウトしました (${timeoutMs}ms)`));
+      settle(() => reject(new FfmpegExportError(`ffmpeg がタイムアウトしました (${timeoutMs}ms)`)));
     }, timeoutMs);
     proc.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
     });
     proc.on("error", (err) => {
-      clearTimeout(timer);
-      reject(new FfmpegExportError(`ffmpeg の起動に失敗しました: ${err.message}`));
+      settle(() => reject(new FfmpegExportError(`ffmpeg の起動に失敗しました: ${err.message}`)));
     });
     proc.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new FfmpegExportError(`ffmpeg が失敗しました (code=${code}): ${stderr.slice(-500)}`));
-      }
+      settle(() => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new FfmpegExportError(`ffmpeg が失敗しました (code=${code}): ${stderr.slice(-500)}`));
+        }
+      });
     });
   });
 }
@@ -55,6 +77,9 @@ function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } =
  * @param {number} [options.timeoutMs]
  */
 export async function muxFramesToMp4({ framePattern, fps, audioPath, outPath, ffmpegPath, timeoutMs }) {
+  assertSafeArg(framePattern, "framePattern");
+  assertSafeArg(audioPath, "audioPath");
+  assertSafeArg(outPath, "outPath");
   const args = [
     "-y",
     "-framerate", String(fps),
@@ -81,6 +106,9 @@ export async function muxFramesToMp4({ framePattern, fps, audioPath, outPath, ff
  * @param {number} [options.timeoutMs]
  */
 export async function muxVideoAudio({ videoPath, audioPath, outPath, ffmpegPath, timeoutMs }) {
+  assertSafeArg(videoPath, "videoPath");
+  assertSafeArg(audioPath, "audioPath");
+  assertSafeArg(outPath, "outPath");
   const args = [
     "-y",
     "-i", videoPath,
