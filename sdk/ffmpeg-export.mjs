@@ -38,6 +38,7 @@ function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } =
   assertSafeArg(ffmpegPath, "ffmpegPath");
   return new Promise((resolve, reject) => {
     const proc = spawn(ffmpegPath, args);
+    proc.stdout.resume();
     let stderr = "";
     let settled = false;
     const settle = (fn) => {
@@ -97,6 +98,7 @@ export async function muxFramesToMp4({ framePattern, fps, audioPath, outPath, ff
     "-pix_fmt", "yuv420p",
     "-c:a", "aac",
     "-shortest",
+    "-movflags", "+faststart",
     outPath,
   ];
   await runFfmpeg(args, { ffmpegPath, timeoutMs });
