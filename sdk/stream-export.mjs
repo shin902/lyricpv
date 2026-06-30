@@ -1,5 +1,5 @@
 /**
- * ブラウザ専用: OffscreenCanvas.captureStream() + MediaRecorder による
+ * ブラウザ専用: HTMLCanvasElement.captureStream() + MediaRecorder による
  * フレーム逐次書き出し (要件定義 11 章「MP4 書き出し」の MediaRecorder 経路)。
  *
  * captureStream() はキャンバスの内容を実時間ベースでサンプリングするため、
@@ -20,7 +20,7 @@ export class StreamExportError extends Error {}
  * @param {import("./lyric-player.mjs").Player} player
  * @param {{seekTo: (ms: number) => void}} clock manualClockAdapter() の戻り値
  * @param {Object} options
- * @param {OffscreenCanvas|HTMLCanvasElement} options.canvas
+ * @param {HTMLCanvasElement} options.canvas
  * @param {number} [options.fps=30]
  * @param {string} [options.mimeType]
  * @param {(frame: {index: number, ms: number, frameCount: number}) => (Promise<void>|void)} [options.onFrame]
@@ -29,10 +29,10 @@ export class StreamExportError extends Error {}
  */
 export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, onFrame } = {}) {
   if (typeof MediaRecorder === "undefined") {
-    throw new StreamExportError("この環境は MediaRecorder をサポートしていません");
+    return Promise.reject(new StreamExportError("この環境は MediaRecorder をサポートしていません"));
   }
   if (typeof canvas?.captureStream !== "function") {
-    throw new StreamExportError("canvas.captureStream() が利用できません (OffscreenCanvas 未対応の可能性)");
+    return Promise.reject(new StreamExportError("canvas.captureStream() が利用できません (OffscreenCanvas 未対応の可能性)"));
   }
 
   const stream = canvas.captureStream(fps);
@@ -54,6 +54,9 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
   };
 
   const cleanupStream = () => stream.getTracks().forEach((t) => t.stop());
+  const stopRecorder = () => {
+    if (recorder.state !== "inactive") recorder.stop();
+  };
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -65,7 +68,7 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
 
     recorder.onerror = (event) => {
       settle(() => reject(event.error ?? new StreamExportError("MediaRecorder でエラーが発生しました")));
-      recorder.stop();
+      stopRecorder();
       cleanupStream();
     };
     recorder.onstop = () => {
@@ -75,10 +78,10 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
 
     recorder.start();
     renderFrames(player, clock, { fps, onFrame: pacedOnFrame })
-      .then(() => recorder.stop())
+      .then(() => stopRecorder())
       .catch((err) => {
         settle(() => reject(err));
-        recorder.stop();
+        stopRecorder();
         cleanupStream();
       });
   });

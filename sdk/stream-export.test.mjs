@@ -27,7 +27,7 @@ async function loadedPlayer() {
 test("recordCanvasStream: MediaRecorder 未定義の環境では StreamExportError", async () => {
   assert.equal(typeof globalThis.MediaRecorder, "undefined");
   const { player, clock } = await loadedPlayer();
-  assert.throws(
+  await assert.rejects(
     () => recordCanvasStream(player, clock, { canvas: { captureStream: () => ({}) } }),
     StreamExportError
   );
@@ -38,7 +38,7 @@ test("recordCanvasStream: canvas.captureStream が無い場合は StreamExportEr
   globalThis.MediaRecorder = class {};
   try {
     const { player, clock } = await loadedPlayer();
-    assert.throws(
+    await assert.rejects(
       () => recordCanvasStream(player, clock, { canvas: {} }),
       StreamExportError
     );
@@ -56,7 +56,7 @@ test("recordCanvasStream: canvas が未指定の場合も StreamExportError(capt
   globalThis.MediaRecorder = class {};
   try {
     const { player, clock } = await loadedPlayer();
-    assert.throws(
+    await assert.rejects(
       () => recordCanvasStream(player, clock, {}),
       StreamExportError
     );

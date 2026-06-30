@@ -40,6 +40,8 @@ function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } =
   return new Promise((resolve, reject) => {
     const proc = spawn(ffmpegPath, args);
     proc.stdout.resume();
+    proc.stdout.on("error", () => {});
+    proc.stderr.on("error", () => {});
     let stderr = "";
     let settled = false;
     const settle = (fn) => {
@@ -157,8 +159,8 @@ export async function exportFramesToMp4(player, clock, { fps, framePattern, writ
   const trackingWriteFrame = async (frame) => {
     await writeFrame(frame);
     // framePattern の %Nd を実インデックスに展開してパスを記録する
-    const filePath = framePattern.replace(/%(\d+)d/, (_, width) =>
-      String(frame.index).padStart(Number(width), "0")
+    const filePath = framePattern.replace(/%(\d*)d/, (_, width) =>
+      width ? String(frame.index).padStart(Number(width), "0") : String(frame.index)
     );
     writtenPaths.push(filePath);
   };
