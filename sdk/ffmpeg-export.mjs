@@ -12,6 +12,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { rm } from "node:fs/promises";
 
 import { renderFrames } from "./frame-driver.mjs";
 
@@ -152,7 +153,22 @@ export async function muxVideoAudio({ videoPath, audioPath, outPath, ffmpegPath,
  * @returns {Promise<number>} 書き出したフレーム数
  */
 export async function exportFramesToMp4(player, clock, { fps, framePattern, writeFrame, audioPath, outPath, ffmpegPath, timeoutMs }) {
-  const frameCount = await renderFrames(player, clock, { fps, onFrame: writeFrame });
-  await muxFramesToMp4({ framePattern, fps, audioPath, outPath, ffmpegPath, timeoutMs });
-  return frameCount;
+  const writtenPaths = [];
+  const trackingWriteFrame = async (frame) => {
+    await writeFrame(frame);
+    // framePattern の %Nd を実インデックスに展開してパスを記録する
+    const filePath = framePattern.replace(/%(\d+)d/, (_, width) =>
+      String(frame.index).padStart(Number(width), "0")
+    );
+    writtenPaths.push(filePath);
+  };
+  try {
+    const frameCount = await renderFrames(player, clock, { fps, onFrame: trackingWriteFrame });
+    await muxFramesToMp4({ framePattern, fps, audioPath, outPath, ffmpegPath, timeoutMs });
+    return frameCount;
+  } catch (err) {
+    // writeFrame 例外などで中断した場合、書き出し済みフレームを削除してから再スロー
+    await Promise.allSettled(writtenPaths.map((p) => rm(p, { force: true })));
+    throw err;
+  }
 }

@@ -44,8 +44,13 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
 
   const frameDurationMs = 1000 / fps;
   const pacedOnFrame = async (frame) => {
+    const start = Date.now();
     if (onFrame) await onFrame(frame);
-    await new Promise((resolve) => setTimeout(resolve, frameDurationMs));
+    const elapsed = Date.now() - start;
+    const remaining = frameDurationMs - elapsed;
+    if (remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining));
+    }
   };
 
   const cleanupStream = () => stream.getTracks().forEach((t) => t.stop());
@@ -59,9 +64,9 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
     };
 
     recorder.onerror = (event) => {
+      settle(() => reject(event.error ?? new StreamExportError("MediaRecorder でエラーが発生しました")));
       recorder.stop();
       cleanupStream();
-      settle(() => reject(event.error ?? new StreamExportError("MediaRecorder でエラーが発生しました")));
     };
     recorder.onstop = () => {
       cleanupStream();
@@ -72,9 +77,9 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
     renderFrames(player, clock, { fps, onFrame: pacedOnFrame })
       .then(() => recorder.stop())
       .catch((err) => {
+        settle(() => reject(err));
         recorder.stop();
         cleanupStream();
-        settle(() => reject(err));
       });
   });
 }

@@ -16,7 +16,7 @@
  * @returns {number[]}
  */
 export function frameTimestamps(durationMs, fps) {
-  if (!(fps > 0)) throw new Error("fps は正の値で指定してください");
+  if (!Number.isFinite(fps) || fps <= 0) throw new Error("fps は正の値で指定してください");
   const frameDurationMs = 1000 / fps;
   const totalFrames = Math.ceil(durationMs / frameDurationMs) + 1;
   const timestamps = [];
@@ -50,7 +50,7 @@ export async function renderFrames(player, clock, { fps, onFrame }) {
   for (let index = 0; index < timestamps.length; index += 1) {
     clock.seekTo(timestamps[index]);
     player.tick();
-    await onFrame({ index, ms: player.position, frameCount: timestamps.length });
+    await onFrame({ index, ms: timestamps[index], frameCount: timestamps.length });
   }
   return timestamps.length;
 }

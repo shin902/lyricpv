@@ -34,6 +34,7 @@ test("recordCanvasStream: MediaRecorder 未定義の環境では StreamExportErr
 });
 
 test("recordCanvasStream: canvas.captureStream が無い場合は StreamExportError", async () => {
+  const original = globalThis.MediaRecorder;
   globalThis.MediaRecorder = class {};
   try {
     const { player, clock } = await loadedPlayer();
@@ -42,11 +43,16 @@ test("recordCanvasStream: canvas.captureStream が無い場合は StreamExportEr
       StreamExportError
     );
   } finally {
-    delete globalThis.MediaRecorder;
+    if (original === undefined) {
+      delete globalThis.MediaRecorder;
+    } else {
+      globalThis.MediaRecorder = original;
+    }
   }
 });
 
 test("recordCanvasStream: canvas が未指定の場合も StreamExportError(captureStream 欠落として扱う)", async () => {
+  const original = globalThis.MediaRecorder;
   globalThis.MediaRecorder = class {};
   try {
     const { player, clock } = await loadedPlayer();
@@ -55,6 +61,10 @@ test("recordCanvasStream: canvas が未指定の場合も StreamExportError(capt
       StreamExportError
     );
   } finally {
-    delete globalThis.MediaRecorder;
+    if (original === undefined) {
+      delete globalThis.MediaRecorder;
+    } else {
+      globalThis.MediaRecorder = original;
+    }
   }
 });
