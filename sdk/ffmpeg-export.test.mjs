@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { FfmpegExportError, muxFramesToMp4, muxVideoAudio, exportFramesToMp4 } from "./ffmpeg-export.mjs";
 import { Player, manualClockAdapter } from "./lyric-player.mjs";
 
-/** 受け取った argv を JSON でファイルに書き出すだけのスタブ "ffmpeg"。 */
+/** 受け取った argv を改行区切りテキストでファイルに書き出すだけのスタブ "ffmpeg"。 */
 async function makeStubFfmpeg(dir, { exitCode = 0 } = {}) {
   const scriptPath = join(dir, "stub-ffmpeg.sh");
   const argsPath = join(dir, "args.json");
