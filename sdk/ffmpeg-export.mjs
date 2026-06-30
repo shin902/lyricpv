@@ -89,6 +89,9 @@ export async function muxFramesToMp4({ framePattern, fps, audioPath, outPath, ff
   assertSafeArg(framePattern, "framePattern");
   assertSafeArg(audioPath, "audioPath");
   assertSafeArg(outPath, "outPath");
+  if (!Number.isFinite(fps) || fps <= 0) {
+    throw new FfmpegExportError("fps は正の有限数を指定してください");
+  }
   const args = [
     "-y",
     "-framerate", String(fps),
