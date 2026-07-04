@@ -114,6 +114,48 @@ test("load は渡された JSON を破壊的に変更しない", async () => {
   assert.notEqual(player.data.phrases[0].words[0].endTime, before.phrases[0].words[0].endTime);
 });
 
+test("load は schemaVersion 欠落を無警告で許容する", async () => {
+  const player = new Player();
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    await player.load(fixture(), manualClockAdapter(60_000));
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(warnings, []);
+});
+
+test("load は schemaVersion のメジャーバージョン一致時に無警告", async () => {
+  const player = new Player();
+  const json = { ...fixture(), schemaVersion: "1.0" };
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    await player.load(json, manualClockAdapter(60_000));
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(warnings, []);
+});
+
+test("load は schemaVersion のメジャーバージョン不一致で警告する", async () => {
+  const player = new Player();
+  const json = { ...fixture(), schemaVersion: "2.0" };
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    await player.load(json, manualClockAdapter(60_000));
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /schemaVersion/);
+});
+
 test("findBeat は直近の拍を返す", async () => {
   const { player } = await loadedPlayer();
   assert.equal(player.findBeat(0).position, 1);

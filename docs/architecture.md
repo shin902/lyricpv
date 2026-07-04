@@ -118,6 +118,16 @@ source(URL/ファイル)
 
 進捗は `progress(stage, message)` コールバックで通知され、CLI が stderr に表示する。
 
+## 契約A のバージョニング方針
+
+契約A の JSON ルートには `schemaVersion` (`major.minor` の semver 文字列、`schema.py` の `SCHEMA_VERSION`) を含める。
+
+- **minor を上げる**: 既存フィールドの意味を変えない後方互換な追加(新しい任意キーの追加など)。解析器・SDK 双方で minor 違いは許容し、警告もエラーも出さない。
+- **major を上げる**: 既存フィールドの削除・意味変更・型変更など破壊的変更。`schema.validate()` はメジャー不一致を `SchemaError` として拒否し、SDK (`Player.load()`) はメジャー不一致を `console.warn` で警告する(読み込み自体は継続する — 未知キーは無視して読み進める設計方針のため)。
+- **欠落は許容**: `schemaVersion` を持たない既存 JSON (`SCHEMA_VERSION` 導入前の出力) は後方互換のため無検証・無警告で受理する。
+- **曲固有情報は置かない**: `lyricsTier` や `refineModel` 等、曲ごとに変わる解析メタ情報は契約A (`lyric_data.json`) ではなく `meta.json` / `overrides.json` 側に置く。契約Aは「解析器を差し替えても SDK 側は無傷」という不変条件を守るための最小限の構造契約に留める。
+- 契約凍結の防御として `tests/golden/` に Tier 別 (T1/T2/T3) の固定フィクスチャを置き、`tests/test_golden.py` で load→to_dict の再シリアライズが完全一致することを検証する。to_dict() のキー順・丸め・フィールド構成に意図しない変更が入ると golden テストが落ちる。
+
 ## 既知の制約・今後の課題
 
 - ダウンビート・構造ラベルは簡易推定(allin1 差し替えで改善余地)
