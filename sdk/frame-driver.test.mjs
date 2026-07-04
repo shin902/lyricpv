@@ -83,6 +83,45 @@ test("renderFrames: onFrame の await を待ってから次のフレームへ進
   assert.equal(maxConcurrent, 1);
 });
 
+test("renderFrames: offsetMs があっても timeupdate と onFrame の時刻が一致する", async () => {
+  const player = new Player();
+  const json = fixture();
+  json.song.source.offsetMs = 20;
+  const clock = manualClockAdapter(100);
+  await player.load(json, clock);
+
+  const updates = [];
+  const frames = [];
+  player.on("timeupdate", (ms) => updates.push(ms));
+  await renderFrames(player, clock, {
+    fps: 10,
+    onFrame: ({ ms }) => frames.push(ms),
+  });
+
+  assert.deepEqual(updates, frames);
+  assert.deepEqual(frames, [0, 100]);
+  assert.equal(clock.getPositionMs(), 80);
+});
+
+test("renderFrames: setOffset() 後も timeupdate と onFrame の時刻が一致する", async () => {
+  const player = new Player();
+  const clock = manualClockAdapter(100);
+  await player.load(fixture(), clock);
+  player.setOffset(-20);
+
+  const updates = [];
+  const frames = [];
+  player.on("timeupdate", (ms) => updates.push(ms));
+  await renderFrames(player, clock, {
+    fps: 10,
+    onFrame: ({ ms }) => frames.push(ms),
+  });
+
+  assert.deepEqual(updates, frames);
+  assert.deepEqual(frames, [0, 100]);
+  assert.equal(clock.getPositionMs(), 120);
+});
+
 test("renderFrames: clock に seekTo がなければ例外", async () => {
   const player = new Player();
   const clock = manualClockAdapter(100);

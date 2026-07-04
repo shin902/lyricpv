@@ -1,7 +1,7 @@
 /**
  * フレーム書き出し用の環境非依存ドライバ。
  *
- * manualClockAdapter + Player.tick() を固定フレームレートで駆動し、
+ * manualClockAdapter + Player.seek() を固定フレームレートで駆動し、
  * 各フレームのレンダリング・保存はコールバックに委ねる(SDK は描画を行わない)。
  * ブラウザの MediaRecorder 経路 (stream-export.mjs) と Node の ffmpeg 経路
  * (ffmpeg-export.mjs) の両方から共有される。
@@ -31,7 +31,8 @@ export function frameTimestamps(durationMs, fps) {
 }
 
 /**
- * clock.seekTo(ms) + player.tick() でフレームを 1 枚ずつ確定させ、
+ * player.seek(ms) でフレームを 1 枚ずつ確定させ、
+ * Player の offsetMs 補正後も timeupdate と onFrame の時刻を一致させる。
  * 都度 onFrame を await する。実時間とは無関係に進むため、
  * 描画やファイル書き出しが重くてもフレーム抜け・音ズレは発生しない。
  *
@@ -48,8 +49,8 @@ export async function renderFrames(player, clock, { fps, onFrame }) {
   }
   const timestamps = frameTimestamps(player.songDurationMs, fps);
   for (let index = 0; index < timestamps.length; index += 1) {
-    clock.seekTo(timestamps[index]);
-    player.tick();
+    // seek() 自体が timeupdate を発火するため、tick() の追加呼び出しは不要。
+    player.seek(timestamps[index]);
     await onFrame({ index, ms: timestamps[index], frameCount: timestamps.length });
   }
   return timestamps.length;

@@ -71,7 +71,10 @@ export function manualClockAdapter(durationMs) {
       playing = false;
     },
     seekTo: (ms) => {
-      pos = Math.max(0, Math.min(ms, durationMs));
+      // Player.seek() は解析軸の offsetMs を差し引いた値を渡すため、
+      // フレーム書き出しでは負値や durationMs 超過も保持する必要がある。
+      // advance() による通常の手動再生は従来どおり曲末で停止する。
+      pos = ms;
     },
     getPositionMs: () => pos,
     onEnded: (cb) => {
