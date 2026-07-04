@@ -35,8 +35,17 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
     return Promise.reject(new StreamExportError("canvas.captureStream() が利用できません (OffscreenCanvas 未対応の可能性)"));
   }
 
-  const stream = canvas.captureStream(fps);
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  let stream;
+  let recorder;
+  try {
+    stream = canvas.captureStream(fps);
+    recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  } catch (err) {
+    // MediaRecorder のコンストラクタは未対応 mimeType などで同期的に失敗する。
+    // captureStream() 済みならトラックを止め、API 契約どおり rejected Promise を返す。
+    stream?.getTracks().forEach((track) => track.stop());
+    return Promise.reject(err);
+  }
   const chunks = [];
   recorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) chunks.push(event.data);

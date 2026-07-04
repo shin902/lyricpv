@@ -68,3 +68,36 @@ test("recordCanvasStream: canvas が未指定の場合も StreamExportError(capt
     }
   }
 });
+
+test("recordCanvasStream: MediaRecorder 構築失敗時はトラックを停止して rejected Promise を返す", async () => {
+  const original = globalThis.MediaRecorder;
+  globalThis.MediaRecorder = class {
+    constructor() {
+      throw new Error("unsupported mimeType");
+    }
+  };
+  let stopped = false;
+  const canvas = {
+    captureStream: () => ({
+      getTracks: () => [{ stop: () => { stopped = true; } }],
+    }),
+  };
+  try {
+    const { player, clock } = await loadedPlayer();
+    let result;
+    assert.doesNotThrow(() => {
+      result = recordCanvasStream(player, clock, {
+        canvas,
+        mimeType: "video/unsupported",
+      });
+    });
+    await assert.rejects(result, /unsupported mimeType/);
+    assert.equal(stopped, true);
+  } finally {
+    if (original === undefined) {
+      delete globalThis.MediaRecorder;
+    } else {
+      globalThis.MediaRecorder = original;
+    }
+  }
+});
