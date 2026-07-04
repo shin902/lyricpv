@@ -88,6 +88,62 @@ interface AudioAdapter {
 | `htmlAudioAdapter(audioEl)` | `<audio>` 要素を包む(インタラクティブ Web アプリ用) |
 | `manualClockAdapter(durationMs)` | 手動クロック。`advance(ms)` で時間を進める。テスト・フレーム逐次レンダリング(MP4 書き出し)用 |
 
+## MP4 書き出し
+
+`tick()` を実時間と無関係に駆動して、フレーム単位で確定的に書き出す。SDK は描画を行わないため、Canvas へのレンダリングとピクセル保存は呼び出し側の責務。
+
+### `sdk/frame-driver.mjs`(環境非依存)
+
+| 関数 | 説明 |
+|---|---|
+| `frameTimestamps(durationMs, fps)` | 0〜durationMs を fps 刻みで分割したタイムスタンプ列(末尾フレーム含む) |
+| `renderFrames(player, clock, {fps, onFrame})` | `player.seek(ms)` → `await onFrame({index, ms, frameCount})` をフレーム数分繰り返す。`seek()` が `offsetMs` を補正し `timeupdate` を発火する。`clock` は `manualClockAdapter()` の戻り値 |
+
+### `sdk/ffmpeg-export.mjs`(Node 専用、ffmpeg パイプライン経路。フレーム精度優先)
+
+| 関数 | 説明 |
+|---|---|
+| `exportFramesToMp4(player, clock, {fps, framePattern, writeFrame, audioPath, outPath})` | `renderFrames()` で駆動しつつ `writeFrame()` で各フレームを連番画像として保存、完了後 ffmpeg で音源と合成して MP4 化 |
+| `muxFramesToMp4({framePattern, fps, audioPath, outPath})` | 既に書き出し済みの連番画像 + 音源を ffmpeg で MP4 化(低レベル API) |
+| `muxVideoAudio({videoPath, audioPath, outPath})` | 既存動画(MediaRecorder 経路の WebM 等)に音源を後付けミキシング |
+
+ffmpeg / ffprobe が PATH にあることを前提とする。
+
+```js
+import { readFileSync, writeFileSync } from "node:fs";
+import { createCanvas } from "canvas"; // npm: node-canvas (このSDKの依存ではなく利用者側で追加する)
+import { Player, manualClockAdapter } from "./lyric-player.mjs";
+import { exportFramesToMp4 } from "./ffmpeg-export.mjs";
+
+const json = JSON.parse(readFileSync("lyric_data.json", "utf8")); // 契約A (lyricpv analyze の出力)
+const player = new Player();
+const clock = manualClockAdapter(json.song.durationMs);
+await player.load(json, clock);
+
+const canvas = createCanvas(1920, 1080);
+const ctx = canvas.getContext("2d");
+
+await exportFramesToMp4(player, clock, {
+  fps: 30,
+  framePattern: "out/frame-%05d.png",
+  audioPath: "master.wav",
+  outPath: "out.mp4",
+  writeFrame: ({ index, ms }) => {
+    const char = player.currentChar(ms);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (char) ctx.fillText(char.char, canvas.width / 2, canvas.height / 2); // 描画はあなたの実装
+    const path = `out/frame-${String(index).padStart(5, "0")}.png`;
+    writeFileSync(path, canvas.toBuffer("image/png")); // ピクセル保存もあなたの実装(ここでは node-canvas の例)
+  },
+});
+```
+
+### `sdk/stream-export.mjs`(ブラウザ専用、MediaRecorder 経路。簡便だが実時間駆動でジッタの余地あり)
+
+| 関数 | 説明 |
+|---|---|
+| `recordCanvasStream(player, clock, {canvas, fps, mimeType, onFrame})` | `HTMLCanvasElement.captureStream()` + `MediaRecorder` で WebM の `Blob` を返す(`OffscreenCanvas` は非対応)。映像のみのため音源は `muxVideoAudio()` で後付け |
+
 ## 最小利用例
 
 ```js
