@@ -78,6 +78,44 @@ uv run lyricpv analyze            # source も省略すると URL から対話�
 - `lyric_data.json` — **契約A**: TextAlive 互換 JSON(これだけが配布対象)
 - `master.wav` / `vocals.wav` / `accompaniment.wav` — 解析用中間ファイル(**再配布しない**)
 - `meta.json` — 歌詞 Tier・使用デバイス・テンポ等の解析メタ
+- `song.toml` — 解析に実際に使った有効設定(Configuration as Data)。次回はこのディレクトリを
+  指定するだけで同条件で再解析できる(手順は次項)
+- `overrides.json` — (任意) SDK 側の `player.applyOverrides()` で使う手動タイミング補正。
+  `lyricpv analyze` の再解析では触らないため、置いておけば再解析後も保持される
+
+#### song.toml で解析を再現する
+
+解析が成功すると、実際に使った設定(CLI フラグ含む)が `out_dir/song.toml` に書き出されます。
+これを指定すればフラグを打ち直さずに同条件で再解析できます。
+
+```bash
+# 初回: フラグで調整しつつ解析 → out_dir/song.toml に有効設定が残る
+uv run lyricpv analyze song.wav -o data/songs/mysong --refine-align --refine-pad 600
+
+# 以降: ディレクトリを指定するだけで同条件で再解析
+uv run lyricpv analyze data/songs/mysong
+```
+
+CLI フラグを付けて再解析すると、その回だけ `song.toml` の値を上書きします(優先順位: **CLI フラグ
+> song.toml > 既定値**)。解析後は上書き後の値で `song.toml` が更新されます。
+
+`song.toml` は手書きすることもできます(スキーマは [src/lyricpv/config.py](src/lyricpv/config.py) の
+docstring を参照)。未知のキーはタイポ検出のためエラーになります。
+
+```toml
+source = "https://www.youtube.com/watch?v=XXXX"
+title = "曲名"
+artist = "アーティスト"
+vocaloid = true
+lyrics_file = "lyrics.lrc"   # このファイルからの相対パス
+
+[separation]
+model = "htdemucs_ft"
+
+[refine]
+enabled = true
+pad_ms = 600
+```
 
 ### 2. WebUI から解析する(任意)
 

@@ -3,6 +3,7 @@
 import lyricpv.cli as cli_mod
 import lyricpv.fetch as fetch_mod
 import lyricpv.pipeline as pipeline_mod
+from lyricpv.config import load_song_config
 from lyricpv.fetch import FetchError
 from lyricpv.separate import SeparationError
 
@@ -105,6 +106,117 @@ def test_analyze_rejects_invalid_refine_params(monkeypatch, capsys, tmp_path):
     captured = capsys.readouterr()
     assert "min_char_score" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_analyze_writes_song_toml_after_success(monkeypatch, tmp_path):
+    """解析成功後、有効設定が out_dir/song.toml に書き出される。"""
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    def fake_run(source, out_dir, *, options, **kwargs):
+        return _DummyResult()
+
+    monkeypatch.setattr(pipeline_mod, "run", fake_run)
+
+    out_dir = tmp_path / "out"
+    code = cli_mod.main(
+        [
+            "analyze",
+            "song.wav",
+            "-o",
+            str(out_dir),
+            "--refine-align",
+            "--refine-pad",
+            "600",
+        ]
+    )
+
+    assert code == 0
+    saved = load_song_config(out_dir)
+    assert saved.source == "song.wav"
+    assert saved.refine.enabled is True
+    assert saved.refine.pad_ms == 600
+    # 触れていないパラメータは既定値のため書き出されない
+    assert saved.refine.min_match_ratio is None
+
+
+def test_analyze_reanalyzes_from_directory_with_song_toml(monkeypatch, tmp_path):
+    """song.toml を含むディレクトリを source に指定すると、そこから再解析する。"""
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    out_dir = tmp_path / "mysong"
+    out_dir.mkdir()
+    (out_dir / "song.toml").write_text(
+        """
+source = "song.wav"
+
+[refine]
+enabled = true
+pad_ms = 600
+""",
+        encoding="utf-8",
+    )
+
+    captured = {}
+
+    def fake_run(source, out_dir_arg, *, options, **kwargs):
+        captured["source"] = source
+        captured["out_dir"] = out_dir_arg
+        captured["options"] = options
+        return _DummyResult()
+
+    monkeypatch.setattr(pipeline_mod, "run", fake_run)
+
+    code = cli_mod.main(["analyze", str(out_dir)])
+
+    assert code == 0
+    assert captured["source"] == "song.wav"
+    assert captured["out_dir"] == out_dir
+    assert captured["options"].refine_align is True
+    assert captured["options"].refine_params.pad_ms == 600
+
+
+def test_analyze_directory_without_source_in_toml_errors(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    out_dir = tmp_path / "mysong"
+    out_dir.mkdir()
+    (out_dir / "song.toml").write_text('title = "曲名"\n', encoding="utf-8")
+
+    code = cli_mod.main(["analyze", str(out_dir)])
+
+    assert code == 1
+    assert "source" in capsys.readouterr().err
+
+
+def test_analyze_cli_flag_overrides_song_toml(monkeypatch, tmp_path):
+    """ディレクトリ再解析でも CLI フラグが song.toml の値より優先される。"""
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    out_dir = tmp_path / "mysong"
+    out_dir.mkdir()
+    (out_dir / "song.toml").write_text(
+        """
+source = "song.wav"
+
+[refine]
+enabled = true
+pad_ms = 400
+""",
+        encoding="utf-8",
+    )
+
+    captured = {}
+
+    def fake_run(source, out_dir_arg, *, options, **kwargs):
+        captured["options"] = options
+        return _DummyResult()
+
+    monkeypatch.setattr(pipeline_mod, "run", fake_run)
+
+    code = cli_mod.main(["analyze", str(out_dir), "--refine-pad", "900"])
+
+    assert code == 0
+    assert captured["options"].refine_params.pad_ms == 900
 
 
 def _feed_input(monkeypatch, answers):
