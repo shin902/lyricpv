@@ -25,7 +25,8 @@ from .enhance import DEFAULT_DEREVERB_MODEL, DEFAULT_KARAOKE_MODEL, enhance_voca
 from .fetch import FetchResult, fetch_youtube, import_file, is_url
 from .lyrics.align import align
 from .lyrics.fetch import fetch_lyrics
-from .lyrics.lrc import LyricLine, is_word_synced, parse_lrc
+from .lyrics.lrc import LyricLine, parse_lrc
+from .lyrics.providers import build_provider_chain, resolve_lyrics
 from .refine import RefineParams, refine_phrases
 from .schema import LyricData, SongMeta, SongSource
 from .separate import separate
@@ -292,16 +293,13 @@ def _resolve_lyrics(
 def _get_lyrics(title: str, artist: str, options: PipelineOptions) -> tuple[list[LyricLine], str]:
     """歌詞行と Tier を決める。ユーザー供給テキストがあれば優先する。"""
     if options.lyrics_text:
-        lines = parse_lrc(options.lyrics_text)
-        if any(ln.start_ms is not None for ln in lines):
-            # align() の経路選択 (is_word_synced) と同じ基準で Tier を判定する。
-            # 一部の行のみ逐字タグを持つ LRC は align() 側で T2 経路になるため、
-            # ここで T1 と報告すると meta.json と実際の整合が食い違う。
-            tier = "T1" if is_word_synced(lines) else "T2"
-        else:
-            tier = "T3"
-        return lines, tier
+        # Tier 判定 (T1/T2/T3) は UserTextProvider に委譲する。
+        chain = build_provider_chain(options.lyrics_text, options.vocaloid)
+        result = resolve_lyrics(chain, title, artist)
+        return parse_lrc(result.lrc_text), result.tier
 
+    # ネットワーク検索は module 属性の fetch_lyrics 経由で行う
+    # (テストでの monkeypatch 差し替えを可能にするため直接呼び出す)。
     lrc, tier = fetch_lyrics(title, artist, vocaloid=options.vocaloid)
     if lrc is None:
         return [], tier
