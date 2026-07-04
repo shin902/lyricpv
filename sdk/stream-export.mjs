@@ -43,7 +43,9 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
   } catch (err) {
     // MediaRecorder のコンストラクタは未対応 mimeType などで同期的に失敗する。
     // captureStream() 済みならトラックを止め、API 契約どおり rejected Promise を返す。
-    stream?.getTracks().forEach((track) => track.stop());
+    stream?.getTracks().forEach((track) => {
+      track.stop();
+    });
     return Promise.reject(err);
   }
   const chunks = [];
@@ -62,7 +64,11 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
     }
   };
 
-  const cleanupStream = () => stream.getTracks().forEach((t) => t.stop());
+  const cleanupStream = () => {
+    stream.getTracks().forEach((t) => {
+      t.stop();
+    });
+  };
   const stopRecorder = () => {
     if (recorder.state !== "inactive") recorder.stop();
   };
