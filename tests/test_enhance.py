@@ -108,9 +108,7 @@ def test_enhance_without_dependency_raises_with_install_hint(tmp_path, monkeypat
 
 
 def test_pick_stem_prefers_keyword_then_falls_back(tmp_path):
-    picked = _pick_stem(
-        ["v_(Instrumental).wav", "v_(Vocals).wav"], ("vocals",), tmp_path, "m"
-    )
+    picked = _pick_stem(["v_(Instrumental).wav", "v_(Vocals).wav"], ("vocals",), tmp_path, "m")
     assert picked.name == "v_(Vocals).wav"
 
     # キーワード不一致でも出力が 1 つだけならそれを採用する
@@ -138,7 +136,9 @@ def test_pick_stem_ignores_input_filename_contamination(tmp_path):
     assert "(No Reverb)" in picked2.name
 
 
-def test_pipeline_passes_custom_enhance_models(fake_audio_separator, tmp_path, synth_wav_path, monkeypatch):
+def test_pipeline_passes_custom_enhance_models(
+    fake_audio_separator, tmp_path, synth_wav_path, monkeypatch
+):
     """PipelineOptions のモデル指定 (CLI の --karaoke-model 等) が enhance に届く。"""
     import lyricpv.pipeline as pipeline_mod
     from lyricpv.pipeline import PipelineOptions, run
@@ -170,7 +170,9 @@ def test_pipeline_passes_custom_enhance_models(fake_audio_separator, tmp_path, s
     assert sep.loaded_models == ["my_karaoke_x.ckpt"]
 
 
-def test_pipeline_records_enhance_models_in_meta(fake_audio_separator, tmp_path, synth_wav_path, monkeypatch):
+def test_pipeline_records_enhance_models_in_meta(
+    fake_audio_separator, tmp_path, synth_wav_path, monkeypatch
+):
     """--enhance-vocals 相当のオプションで meta.json に使用モデルが残る。"""
     import json
 

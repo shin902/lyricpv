@@ -20,9 +20,7 @@ _DEFAULT_PROVIDERS = ["Lrclib", "NetEase", "Megalobiz", "Genius"]
 _VOCALOID_PROVIDERS = ["NetEase", "Lrclib", "Megalobiz", "Genius"]
 
 
-def fetch_lyrics(
-    title: str, artist: str, *, vocaloid: bool = False
-) -> tuple[str | None, str]:
+def fetch_lyrics(title: str, artist: str, *, vocaloid: bool = False) -> tuple[str | None, str]:
     """歌詞を検索して LRC テキストと到達 Tier を返す。
 
     Returns:

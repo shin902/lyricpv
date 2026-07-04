@@ -34,9 +34,18 @@ class FetchResult:
 def _ffmpeg_to_master(src: Path, dst: Path) -> None:
     """任意の音声/動画ファイルを 44.1kHz ステレオ WAV に変換する。"""
     cmd = [
-        "ffmpeg", "-y", "-i", str(src),
-        "-vn", "-ac", "2", "-ar", str(MASTER_SAMPLE_RATE),
-        "-c:a", "pcm_s16le", str(dst),
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(src),
+        "-vn",
+        "-ac",
+        "2",
+        "-ar",
+        str(MASTER_SAMPLE_RATE),
+        "-c:a",
+        "pcm_s16le",
+        str(dst),
     ]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
@@ -49,9 +58,19 @@ def _ffmpeg_to_master(src: Path, dst: Path) -> None:
 def _probe_duration_ms(path: Path) -> int:
     try:
         proc = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-            capture_output=True, text=True, timeout=60,
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
     except subprocess.TimeoutExpired as e:
         raise FetchError(f"ffprobe がタイムアウトしました: {path}") from e
@@ -107,8 +126,9 @@ def fetch_youtube(url: str, out_dir: str | Path) -> FetchResult:
     )
 
 
-def import_file(path: str | Path, out_dir: str | Path, *,
-                title: str | None = None, artist: str | None = None) -> FetchResult:
+def import_file(
+    path: str | Path, out_dir: str | Path, *, title: str | None = None, artist: str | None = None
+) -> FetchResult:
     """ローカルの音声ファイルから WAV マスターを作る。"""
     path = Path(path)
     if not path.exists():

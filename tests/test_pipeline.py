@@ -59,10 +59,7 @@ def test_partial_word_sync_reports_tier_t2(synth_wav_path, tmp_path):
     # 1 行目のみ逐字タグがあり 2 行目は行タイミングのみの LRC。
     # align() は is_word_synced (全行が逐字) でないため T2 経路を取るので、
     # meta.json / lyrics_tier も T1 ではなく T2 と整合させる
-    lrc = (
-        "[00:01.00] <00:01.00> 夜に <00:02.00> 駆ける\n"
-        "[00:04.00] 君の声が聞こえる\n"
-    )
+    lrc = "[00:01.00] <00:01.00> 夜に <00:02.00> 駆ける\n[00:04.00] 君の声が聞こえる\n"
 
     result = run(
         str(synth_wav_path),
@@ -100,7 +97,9 @@ def test_on_metadata_overrides_title_artist(synth_wav_path, tmp_path):
         str(synth_wav_path),
         tmp_path / "out",
         options=PipelineOptions(
-            title="装飾だらけのタイトル", artist="チャンネル名", lyrics_text=LRC,
+            title="装飾だらけのタイトル",
+            artist="チャンネル名",
+            lyrics_text=LRC,
             skip_separation=True,
         ),
         on_metadata=on_metadata,
@@ -148,9 +147,7 @@ def test_lyrics_review_skip_yields_t4(synth_wav_path, tmp_path, monkeypatch):
     # レビューで「歌詞なしで続行」を選ぶと T4 (フレーズ空) になる
     import lyricpv.pipeline as pipeline_mod
 
-    monkeypatch.setattr(
-        pipeline_mod, "fetch_lyrics", lambda *a, **k: ("[00:01.00] 不要\n", "T2")
-    )
+    monkeypatch.setattr(pipeline_mod, "fetch_lyrics", lambda *a, **k: ("[00:01.00] 不要\n", "T2"))
 
     result = run(
         str(synth_wav_path),

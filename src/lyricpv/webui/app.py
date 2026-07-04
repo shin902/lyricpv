@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from ..pipeline import LYRIC_DATA_FILENAME, META_FILENAME, PipelineOptions
-from .jobs import JobManager, SONG_ID_CHARS
+from .jobs import SONG_ID_CHARS, JobManager
 
 _SONG_ID_RE = re.compile(rf"^[{SONG_ID_CHARS}]+$")
 

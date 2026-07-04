@@ -130,9 +130,7 @@ def _pick_stem(outputs: list[str], keywords: tuple[str, ...], work_dir: Path, mo
     if len(paths) == 1:
         return paths[0]
     names = ", ".join(p.name for p in paths)
-    raise EnhanceError(
-        f"モデル {model} の出力から目的のステムを特定できませんでした: {names}"
-    )
+    raise EnhanceError(f"モデル {model} の出力から目的のステムを特定できませんでした: {names}")
 
 
 def _stem_labels(filename: str) -> list[str]:

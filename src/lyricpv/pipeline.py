@@ -56,9 +56,7 @@ class LyricsDecision(NamedTuple):
 
 
 # 検索した (title, artist, 行, tier) を受け取り、採用/スキップ/再検索を返す。
-LyricsReviewCallback = Callable[
-    [str, str, "list[LyricLine]", str], LyricsDecision
-]
+LyricsReviewCallback = Callable[[str, str, "list[LyricLine]", str], LyricsDecision]
 
 
 @dataclass
@@ -138,9 +136,7 @@ def run(
     # ② 歌詞取得 (対話レビューがあれば確認・再検索ループ)
     # 分離より先に解決することで、対話を前半に集約しユーザーが以降を放置できる。
     report("lyrics", "歌詞を取得しています")
-    lines, tier, title, artist = _resolve_lyrics(
-        title, artist, options, on_lyrics_review, report
-    )
+    lines, tier, title, artist = _resolve_lyrics(title, artist, options, on_lyrics_review, report)
     report("lyrics", f"歌詞 Tier: {tier}")
 
     # ③ 分離 (MPS)
@@ -293,9 +289,7 @@ def _resolve_lyrics(
         return lines, tier, title, artist
 
 
-def _get_lyrics(
-    title: str, artist: str, options: PipelineOptions
-) -> tuple[list[LyricLine], str]:
+def _get_lyrics(title: str, artist: str, options: PipelineOptions) -> tuple[list[LyricLine], str]:
     """歌詞行と Tier を決める。ユーザー供給テキストがあれば優先する。"""
     if options.lyrics_text:
         lines = parse_lrc(options.lyrics_text)

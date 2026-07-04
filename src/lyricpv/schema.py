@@ -208,7 +208,9 @@ def from_dict(data: dict[str, Any]) -> LyricData:
             )
             for p in data.get("phrases", [])
         ],
-        beats=[Beat(start_time=b["startTime"], position=b["position"]) for b in data.get("beats", [])],
+        beats=[
+            Beat(start_time=b["startTime"], position=b["position"]) for b in data.get("beats", [])
+        ],
         chords=[
             Chord(start_time=c["startTime"], end_time=c["endTime"], name=c["name"])
             for c in data.get("chords", [])
@@ -217,7 +219,9 @@ def from_dict(data: dict[str, Any]) -> LyricData:
             Segment(start_time=s["startTime"], end_time=s["endTime"], label=s["label"])
             for s in data.get("segments", [])
         ],
-        amplitude=[AmplitudePoint(time=a["time"], value=a["value"]) for a in data.get("amplitude", [])],
+        amplitude=[
+            AmplitudePoint(time=a["time"], value=a["value"]) for a in data.get("amplitude", [])
+        ],
         valence_arousal=[
             VAPoint(time=v["time"], valence=v["valence"], arousal=v["arousal"])
             for v in data.get("valenceArousal", [])
@@ -253,7 +257,9 @@ def validate(data: dict[str, Any]) -> None:
     prev_phrase_start = -1
     for p in data.get("phrases", []):
         _require(p["startTime"] <= p["endTime"], f"phrase の時刻が逆転: {p.get('text', '')!r}")
-        _require(p["startTime"] >= prev_phrase_start, "phrases は startTime 昇順である必要があります")
+        _require(
+            p["startTime"] >= prev_phrase_start, "phrases は startTime 昇順である必要があります"
+        )
         prev_phrase_start = p["startTime"]
         prev_word_start = -1
         for w in p.get("words", []):
@@ -265,7 +271,9 @@ def validate(data: dict[str, Any]) -> None:
             prev_word_start = w["startTime"]
             prev_char_start = -1
             for c in w.get("chars", []):
-                _require(c["startTime"] <= c["endTime"], f"char の時刻が逆転: {c.get('char', '')!r}")
+                _require(
+                    c["startTime"] <= c["endTime"], f"char の時刻が逆転: {c.get('char', '')!r}"
+                )
                 _require(
                     c["startTime"] >= prev_char_start,
                     f"word 内の chars は startTime 昇順である必要があります: {w.get('text', '')!r}",
@@ -284,11 +292,17 @@ def validate(data: dict[str, Any]) -> None:
             )
 
     for a in data.get("amplitude", []):
-        _require_finite(a["value"], f"amplitude.value が有限の数値ではありません (time={a.get('time')})")
-        _require(0.0 <= a["value"] <= 1.0, f"amplitude.value は 0–1 の範囲です (time={a.get('time')})")
+        _require_finite(
+            a["value"], f"amplitude.value が有限の数値ではありません (time={a.get('time')})"
+        )
+        _require(
+            0.0 <= a["value"] <= 1.0, f"amplitude.value は 0–1 の範囲です (time={a.get('time')})"
+        )
     for v in data.get("valenceArousal", []):
         for key in ("valence", "arousal"):
-            _require_finite(v[key], f"valenceArousal.{key} が有限の数値ではありません (time={v.get('time')})")
+            _require_finite(
+                v[key], f"valenceArousal.{key} が有限の数値ではありません (time={v.get('time')})"
+            )
             _require(
                 -1.0 <= v[key] <= 1.0,
                 f"valenceArousal.{key} は -1〜1 の範囲です (time={v.get('time')})",
