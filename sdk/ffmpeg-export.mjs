@@ -129,9 +129,12 @@ export async function muxVideoAudio({ videoPath, audioPath, outPath, ffmpegPath,
     "-y",
     "-i", videoPath,
     "-i", audioPath,
-    "-c:v", "copy",
+    // MediaRecorder の WebM は通常 VP8/VP9 のため、MP4 互換の H.264 へ変換する。
+    "-c:v", "libx264",
+    "-pix_fmt", "yuv420p",
     "-c:a", "aac",
     "-shortest",
+    "-movflags", "+faststart",
     outPath,
   ];
   await runFfmpeg(args, { ffmpegPath, timeoutMs });
@@ -157,12 +160,13 @@ export async function muxVideoAudio({ videoPath, audioPath, outPath, ffmpegPath,
 export async function exportFramesToMp4(player, clock, { fps, framePattern, writeFrame, audioPath, outPath, ffmpegPath, timeoutMs }) {
   const writtenPaths = [];
   const trackingWriteFrame = async (frame) => {
-    await writeFrame(frame);
     // framePattern の %Nd を実インデックスに展開してパスを記録する
     const filePath = framePattern.replace(/%(\d*)d/, (_, width) =>
       width ? String(frame.index).padStart(Number(width), "0") : String(frame.index)
     );
+    // writeFrame が部分ファイルを残して失敗する場合も削除対象に含める。
     writtenPaths.push(filePath);
+    await writeFrame(frame);
   };
   try {
     const frameCount = await renderFrames(player, clock, { fps, onFrame: trackingWriteFrame });

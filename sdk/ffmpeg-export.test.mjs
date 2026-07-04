@@ -77,6 +77,25 @@ test("muxFramesToMp4: ffmpeg が非0終了したら FfmpegExportError を投げ�
   }
 });
 
+test("muxVideoAudio: MediaRecorder の WebM を H.264 に変換して MP4 化する", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ffmpeg-export-test-"));
+  try {
+    const stub = await makeStubFfmpeg(dir);
+    await muxVideoAudio({
+      videoPath: "capture.webm",
+      audioPath: "master.wav",
+      outPath: "out.mp4",
+      ffmpegPath: stub.scriptPath,
+    });
+    const args = await stub.readArgs();
+    assert.equal(args[args.indexOf("-c:v") + 1], "libx264");
+    assert.equal(args[args.indexOf("-pix_fmt") + 1], "yuv420p");
+    assert.equal(args[args.indexOf("-c:a") + 1], "aac");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("muxFramesToMp4: 大量の stderr 出力でも末尾のみ保持しエラーメッセージが膨張しない", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ffmpeg-export-test-"));
   try {
@@ -141,6 +160,33 @@ test("exportFramesToMp4: renderFrames で writeFrame を全フレーム呼び、
     const args = await stub.readArgs();
     assert.ok(args.includes("master.wav"));
     assert.ok(args.includes("out.mp4"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("exportFramesToMp4: writeFrame が部分ファイルを残して失敗しても削除する", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ffmpeg-export-test-"));
+  try {
+    const player = new Player();
+    const clock = manualClockAdapter(100);
+    await player.load(fixture(100), clock);
+    const partialPath = join(dir, "frame-00000.png");
+
+    await assert.rejects(
+      () => exportFramesToMp4(player, clock, {
+        fps: 30,
+        framePattern: join(dir, "frame-%05d.png"),
+        audioPath: "master.wav",
+        outPath: "out.mp4",
+        writeFrame: async () => {
+          await writeFile(partialPath, "partial");
+          throw new Error("disk full");
+        },
+      }),
+      /disk full/
+    );
+    await assert.rejects(() => readFile(partialPath), { code: "ENOENT" });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
