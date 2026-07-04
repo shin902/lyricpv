@@ -85,7 +85,13 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
       settle(() => resolve(new Blob(chunks, { type: recorder.mimeType })));
     };
 
-    recorder.start();
+    try {
+      recorder.start();
+    } catch (err) {
+      cleanupStream();
+      settle(() => reject(err));
+      return;
+    }
     renderFrames(player, clock, { fps, onFrame: pacedOnFrame })
       .then(() => stopRecorder())
       .catch((err) => {

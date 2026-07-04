@@ -101,3 +101,32 @@ test("recordCanvasStream: MediaRecorder 構築失敗時はトラックを停止�
     }
   }
 });
+
+test("recordCanvasStream: MediaRecorder 開始失敗時はトラックを停止して rejected Promise を返す", async () => {
+  const original = globalThis.MediaRecorder;
+  globalThis.MediaRecorder = class {
+    start() {
+      throw new Error("unsupported stream");
+    }
+  };
+  let stopped = false;
+  const canvas = {
+    captureStream: () => ({
+      getTracks: () => [{ stop: () => { stopped = true; } }],
+    }),
+  };
+  try {
+    const { player, clock } = await loadedPlayer();
+    await assert.rejects(
+      recordCanvasStream(player, clock, { canvas }),
+      /unsupported stream/
+    );
+    assert.equal(stopped, true);
+  } finally {
+    if (original === undefined) {
+      delete globalThis.MediaRecorder;
+    } else {
+      globalThis.MediaRecorder = original;
+    }
+  }
+});
