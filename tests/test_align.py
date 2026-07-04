@@ -63,7 +63,9 @@ def test_word_synced_uses_given_times():
 
 def test_plain_text_uses_amplitude_span():
     lines = parse_lrc("一行目の歌詞\n二行目の歌詞\n")
-    amplitude = [AmplitudePoint(time=t, value=0.0 if t < 20_000 else 0.8) for t in range(0, 100_000, 1000)]
+    amplitude = [
+        AmplitudePoint(time=t, value=0.0 if t < 20_000 else 0.8) for t in range(0, 100_000, 1000)
+    ]
     phrases = align(lines, 100_000, amplitude)
     assert len(phrases) == 2
     # 歌唱開始 (20 秒) より前に歌詞が置かれない

@@ -32,7 +32,11 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
     return Promise.reject(new StreamExportError("この環境は MediaRecorder をサポートしていません"));
   }
   if (typeof canvas?.captureStream !== "function") {
-    return Promise.reject(new StreamExportError("canvas.captureStream() が利用できません (OffscreenCanvas 未対応の可能性)"));
+    return Promise.reject(
+      new StreamExportError(
+        "canvas.captureStream() が利用できません (OffscreenCanvas 未対応の可能性)",
+      ),
+    );
   }
 
   let stream;
@@ -82,7 +86,9 @@ export function recordCanvasStream(player, clock, { canvas, fps = 30, mimeType, 
     };
 
     recorder.onerror = (event) => {
-      settle(() => reject(event.error ?? new StreamExportError("MediaRecorder でエラーが発生しました")));
+      settle(() =>
+        reject(event.error ?? new StreamExportError("MediaRecorder でエラーが発生しました")),
+      );
       stopRecorder();
       cleanupStream();
     };

@@ -20,7 +20,11 @@ def test_beats_near_120bpm(analyzed):
     intervals = np.diff([b.start_time for b in beats])
     # 120BPM = 500ms 間隔 (倍/半テンポ誤検出も許容範囲として 250/1000 を除外しない)
     median = float(np.median(intervals))
-    assert median == pytest.approx(500, abs=60) or median == pytest.approx(250, abs=30) or median == pytest.approx(1000, abs=120)
+    assert (
+        median == pytest.approx(500, abs=60)
+        or median == pytest.approx(250, abs=30)
+        or median == pytest.approx(1000, abs=120)
+    )
 
 
 def test_beat_positions_cycle_1_to_4(analyzed):
@@ -75,7 +79,9 @@ def test_amplitude_zero_on_silence(tmp_path):
 def test_onset_decay_gate_decays_after_onset():
     onset_env = np.zeros(50)
     onset_env[0] = 10.0  # 先頭のみオンセット
-    gate = music_map._onset_decay_gate(onset_env, sr=22_050, hop=music_map.HOP, decay_ms=400.0, floor=0.35)
+    gate = music_map._onset_decay_gate(
+        onset_env, sr=22_050, hop=music_map.HOP, decay_ms=400.0, floor=0.35
+    )
     assert gate[0] == pytest.approx(1.0)
     assert gate[-1] == pytest.approx(0.35)
     # 新たなオンセットがない区間は単調に減衰する
@@ -146,7 +152,12 @@ def test_valence_arousal_finite_on_silence_and_round_trips_json(tmp_path):
         assert -1.0 <= p.arousal <= 1.0
 
     data = LyricData(
-        song=SongMeta(title="無音", artist="lyricpv", duration_ms=6000, source=SongSource(type="file", id="silent")),
+        song=SongMeta(
+            title="無音",
+            artist="lyricpv",
+            duration_ms=6000,
+            source=SongSource(type="file", id="silent"),
+        ),
         valence_arousal=mm.valence_arousal,
     )
     json_path = tmp_path / "lyric_data.json"

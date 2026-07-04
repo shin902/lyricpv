@@ -28,7 +28,9 @@ function assertSafeArg(value, label) {
     throw new FfmpegExportError(`${label} は空でない文字列を指定してください`);
   }
   if (value.startsWith("-")) {
-    throw new FfmpegExportError(`${label} に "-" で始まる値は指定できません (ffmpeg オプションとして解釈される可能性があります): ${value}`);
+    throw new FfmpegExportError(
+      `${label} に "-" で始まる値は指定できません (ffmpeg オプションとして解釈される可能性があります): ${value}`,
+    );
   }
 }
 
@@ -70,7 +72,9 @@ function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } =
         if (code === 0) {
           resolve();
         } else {
-          reject(new FfmpegExportError(`ffmpeg が失敗しました (code=${code}): ${stderr.slice(-500)}`));
+          reject(
+            new FfmpegExportError(`ffmpeg が失敗しました (code=${code}): ${stderr.slice(-500)}`),
+          );
         }
       });
     });
@@ -88,7 +92,14 @@ function runFfmpeg(args, { ffmpegPath = "ffmpeg", timeoutMs = 10 * 60 * 1000 } =
  * @param {string} [options.ffmpegPath="ffmpeg"]
  * @param {number} [options.timeoutMs]
  */
-export async function muxFramesToMp4({ framePattern, fps, audioPath, outPath, ffmpegPath, timeoutMs }) {
+export async function muxFramesToMp4({
+  framePattern,
+  fps,
+  audioPath,
+  outPath,
+  ffmpegPath,
+  timeoutMs,
+}) {
   assertSafeArg(framePattern, "framePattern");
   assertSafeArg(audioPath, "audioPath");
   assertSafeArg(outPath, "outPath");
@@ -97,14 +108,21 @@ export async function muxFramesToMp4({ framePattern, fps, audioPath, outPath, ff
   }
   const args = [
     "-y",
-    "-framerate", String(fps),
-    "-i", framePattern,
-    "-i", audioPath,
-    "-c:v", "libx264",
-    "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
+    "-framerate",
+    String(fps),
+    "-i",
+    framePattern,
+    "-i",
+    audioPath,
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
     "-shortest",
-    "-movflags", "+faststart",
+    "-movflags",
+    "+faststart",
     outPath,
   ];
   await runFfmpeg(args, { ffmpegPath, timeoutMs });
@@ -127,14 +145,20 @@ export async function muxVideoAudio({ videoPath, audioPath, outPath, ffmpegPath,
   assertSafeArg(outPath, "outPath");
   const args = [
     "-y",
-    "-i", videoPath,
-    "-i", audioPath,
+    "-i",
+    videoPath,
+    "-i",
+    audioPath,
     // MediaRecorder の WebM は通常 VP8/VP9 のため、MP4 互換の H.264 へ変換する。
-    "-c:v", "libx264",
-    "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
     "-shortest",
-    "-movflags", "+faststart",
+    "-movflags",
+    "+faststart",
     outPath,
   ];
   await runFfmpeg(args, { ffmpegPath, timeoutMs });
@@ -157,12 +181,16 @@ export async function muxVideoAudio({ videoPath, audioPath, outPath, ffmpegPath,
  * @param {number} [options.timeoutMs]
  * @returns {Promise<number>} 書き出したフレーム数
  */
-export async function exportFramesToMp4(player, clock, { fps, framePattern, writeFrame, audioPath, outPath, ffmpegPath, timeoutMs }) {
+export async function exportFramesToMp4(
+  player,
+  clock,
+  { fps, framePattern, writeFrame, audioPath, outPath, ffmpegPath, timeoutMs },
+) {
   const writtenPaths = [];
   const trackingWriteFrame = async (frame) => {
     // framePattern の %Nd を実インデックスに展開してパスを記録する
     const filePath = framePattern.replace(/%(\d*)d/, (_, width) =>
-      width ? String(frame.index).padStart(Number(width), "0") : String(frame.index)
+      width ? String(frame.index).padStart(Number(width), "0") : String(frame.index),
     );
     // writeFrame が部分ファイルを残して失敗する場合も削除対象に含める。
     writtenPaths.push(filePath);

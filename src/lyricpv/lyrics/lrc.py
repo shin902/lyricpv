@@ -90,7 +90,7 @@ def _parse_word_tags(body: str) -> list[TimedWord]:
     words: list[TimedWord] = []
     for i, m in enumerate(tags):
         end = tags[i + 1].start() if i + 1 < len(tags) else len(body)
-        chunk = body[m.end():end].strip()
+        chunk = body[m.end() : end].strip()
         if chunk:
             words.append(TimedWord(start_ms=_tag_to_ms(m), text=chunk))
     return words

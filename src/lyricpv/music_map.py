@@ -145,12 +145,12 @@ def _detect_chords(
     return merged
 
 
-def _detect_segments(
-    y: np.ndarray, chroma: np.ndarray, sr: int, duration_ms: int
-) -> list[Segment]:
+def _detect_segments(y: np.ndarray, chroma: np.ndarray, sr: int, duration_ms: int) -> list[Segment]:
     """凝集クラスタリングで構造境界を出し、反復+エネルギーでサビを推定する。"""
     mfcc = librosa.feature.mfcc(y=y, sr=sr, hop_length=HOP, n_mfcc=13)
-    feats = np.vstack([librosa.util.normalize(chroma, axis=0), librosa.util.normalize(mfcc, axis=0)])
+    feats = np.vstack(
+        [librosa.util.normalize(chroma, axis=0), librosa.util.normalize(mfcc, axis=0)]
+    )
 
     duration_s = duration_ms / 1000
     k = int(np.clip(duration_s / 25, 4, 14))  # 1 セグメント 25 秒程度を目安
@@ -273,7 +273,9 @@ def _onset_decay_gate(
     if n == 0:
         return np.array([])
 
-    onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=hop, units="frames")
+    onsets = librosa.onset.onset_detect(
+        onset_envelope=onset_env, sr=sr, hop_length=hop, units="frames"
+    )
 
     frame_ms = hop / sr * 1000
     decay_frames = max(1, int(decay_ms / frame_ms))

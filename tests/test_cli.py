@@ -50,14 +50,30 @@ def test_analyze_passes_tuning_flags_to_pipeline(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pipeline_mod, "run", fake_run)
 
-    code = cli_mod.main([
-        "analyze", "song.wav", "-o", str(tmp_path / "out"),
-        "--refine-align", "--refine-model", "my/align-model",
-        "--refine-pad", "600", "--refine-min-match", "0.4",
-        "--refine-min-score", "0.5", "--refine-max-squashed", "2",
-        "--enhance-vocals", "--karaoke-model", "my_karaoke.ckpt",
-        "--dereverb-model", "none",
-    ])
+    code = cli_mod.main(
+        [
+            "analyze",
+            "song.wav",
+            "-o",
+            str(tmp_path / "out"),
+            "--refine-align",
+            "--refine-model",
+            "my/align-model",
+            "--refine-pad",
+            "600",
+            "--refine-min-match",
+            "0.4",
+            "--refine-min-score",
+            "0.5",
+            "--refine-max-squashed",
+            "2",
+            "--enhance-vocals",
+            "--karaoke-model",
+            "my_karaoke.ckpt",
+            "--dereverb-model",
+            "none",
+        ]
+    )
 
     assert code == 0
     opt = captured["options"]
@@ -74,9 +90,16 @@ def test_analyze_passes_tuning_flags_to_pipeline(monkeypatch, tmp_path):
 def test_analyze_rejects_invalid_refine_params(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
 
-    code = cli_mod.main([
-        "analyze", "song.wav", "-o", str(tmp_path / "out"), "--refine-min-score", "1.5",
-    ])
+    code = cli_mod.main(
+        [
+            "analyze",
+            "song.wav",
+            "-o",
+            str(tmp_path / "out"),
+            "--refine-min-score",
+            "1.5",
+        ]
+    )
 
     assert code == 1
     captured = capsys.readouterr()

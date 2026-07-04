@@ -10,7 +10,12 @@ import { mkdtemp, writeFile, readFile, rm, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { FfmpegExportError, muxFramesToMp4, muxVideoAudio, exportFramesToMp4 } from "./ffmpeg-export.mjs";
+import {
+  FfmpegExportError,
+  muxFramesToMp4,
+  muxVideoAudio,
+  exportFramesToMp4,
+} from "./ffmpeg-export.mjs";
 import { Player, manualClockAdapter } from "./lyric-player.mjs";
 
 /** 受け取った argv を改行区切りテキストでファイルに書き出すだけのスタブ "ffmpeg"。 */
@@ -25,13 +30,19 @@ exit ${exitCode}
   await chmod(scriptPath, 0o755);
   return {
     scriptPath,
-    readArgs: async () => (await readFile(argsPath, "utf8")).split("\n").filter((s) => s.length > 0),
+    readArgs: async () =>
+      (await readFile(argsPath, "utf8")).split("\n").filter((s) => s.length > 0),
   };
 }
 
 function fixture(durationMs) {
   return {
-    song: { title: "t", artist: "a", durationMs, source: { type: "file", id: "t.wav", offsetMs: 0 } },
+    song: {
+      title: "t",
+      artist: "a",
+      durationMs,
+      source: { type: "file", id: "t.wav", offsetMs: 0 },
+    },
     phrases: [],
   };
 }
@@ -63,14 +74,15 @@ test("muxFramesToMp4: ffmpeg が非0終了したら FfmpegExportError を投げ�
   try {
     const stub = await makeStubFfmpeg(dir, { exitCode: 1 });
     await assert.rejects(
-      () => muxFramesToMp4({
-        framePattern: "frames/frame-%05d.png",
-        fps: 24,
-        audioPath: "master.wav",
-        outPath: "out.mp4",
-        ffmpegPath: stub.scriptPath,
-      }),
-      FfmpegExportError
+      () =>
+        muxFramesToMp4({
+          framePattern: "frames/frame-%05d.png",
+          fps: 24,
+          audioPath: "master.wav",
+          outPath: "out.mp4",
+          ffmpegPath: stub.scriptPath,
+        }),
+      FfmpegExportError,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -113,19 +125,20 @@ exit 1
     await chmod(scriptPath, 0o755);
 
     await assert.rejects(
-      () => muxFramesToMp4({
-        framePattern: "frames/frame-%05d.png",
-        fps: 24,
-        audioPath: "master.wav",
-        outPath: "out.mp4",
-        ffmpegPath: scriptPath,
-      }),
+      () =>
+        muxFramesToMp4({
+          framePattern: "frames/frame-%05d.png",
+          fps: 24,
+          audioPath: "master.wav",
+          outPath: "out.mp4",
+          ffmpegPath: scriptPath,
+        }),
       (err) => {
         assert.ok(err instanceof FfmpegExportError);
         // エラーメッセージは stderr 末尾 500 文字程度に収まる(無制限蓄積していない)
         assert.ok(err.message.length < 1000, `message too long: ${err.message.length}`);
         return true;
-      }
+      },
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -174,17 +187,18 @@ test("exportFramesToMp4: writeFrame が部分ファイルを残して失敗し�
     const partialPath = join(dir, "frame-00000.png");
 
     await assert.rejects(
-      () => exportFramesToMp4(player, clock, {
-        fps: 30,
-        framePattern: join(dir, "frame-%05d.png"),
-        audioPath: "master.wav",
-        outPath: "out.mp4",
-        writeFrame: async () => {
-          await writeFile(partialPath, "partial");
-          throw new Error("disk full");
-        },
-      }),
-      /disk full/
+      () =>
+        exportFramesToMp4(player, clock, {
+          fps: 30,
+          framePattern: join(dir, "frame-%05d.png"),
+          audioPath: "master.wav",
+          outPath: "out.mp4",
+          writeFrame: async () => {
+            await writeFile(partialPath, "partial");
+            throw new Error("disk full");
+          },
+        }),
+      /disk full/,
     );
     await assert.rejects(() => readFile(partialPath), { code: "ENOENT" });
   } finally {
@@ -194,21 +208,33 @@ test("exportFramesToMp4: writeFrame が部分ファイルを残して失敗し�
 
 test("muxFramesToMp4: '-' で始まる引数は引数インジェクションとして拒否する", async () => {
   await assert.rejects(
-    () => muxFramesToMp4({ framePattern: "frame-%05d.png", fps: 30, audioPath: "a.wav", outPath: "-rf" }),
-    FfmpegExportError
+    () =>
+      muxFramesToMp4({
+        framePattern: "frame-%05d.png",
+        fps: 30,
+        audioPath: "a.wav",
+        outPath: "-rf",
+      }),
+    FfmpegExportError,
   );
 });
 
 test("muxFramesToMp4: 空文字列の引数は拒否する", async () => {
   await assert.rejects(
     () => muxFramesToMp4({ framePattern: "", fps: 30, audioPath: "a.wav", outPath: "out.mp4" }),
-    FfmpegExportError
+    FfmpegExportError,
   );
 });
 
 test("muxVideoAudio: ffmpegPath が '-' で始まる場合は拒否する", async () => {
   await assert.rejects(
-    () => muxVideoAudio({ videoPath: "v.webm", audioPath: "a.wav", outPath: "out.mp4", ffmpegPath: "--evil" }),
-    FfmpegExportError
+    () =>
+      muxVideoAudio({
+        videoPath: "v.webm",
+        audioPath: "a.wav",
+        outPath: "out.mp4",
+        ffmpegPath: "--evil",
+      }),
+    FfmpegExportError,
   );
 });

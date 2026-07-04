@@ -14,61 +14,97 @@ from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="lyricpv", description="文字PV生成 SDK のオフライン解析ツール")
+    parser = argparse.ArgumentParser(
+        prog="lyricpv", description="文字PV生成 SDK のオフライン解析ツール"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_analyze = sub.add_parser("analyze", help="楽曲を解析して TextAlive 互換 JSON を生成する")
     p_analyze.add_argument(
-        "source", nargs="?", default=None,
+        "source",
+        nargs="?",
+        default=None,
         help="YouTube URL または音声ファイルのパス (省略時は対話入力)",
     )
     p_analyze.add_argument(
-        "-i", "--interactive", action="store_true",
+        "-i",
+        "--interactive",
+        action="store_true",
         help="タイトル/アーティストの確認と歌詞検索結果のレビューを対話で行う",
     )
-    p_analyze.add_argument("-o", "--out-dir", default=None, help="出力ディレクトリ (既定: data/songs/<名前>)")
+    p_analyze.add_argument(
+        "-o", "--out-dir", default=None, help="出力ディレクトリ (既定: data/songs/<名前>)"
+    )
     p_analyze.add_argument("--title", default=None, help="タイトルの上書き")
     p_analyze.add_argument("--artist", default=None, help="アーティスト名の上書き")
-    p_analyze.add_argument("--lyrics", default=None, help="歌詞ファイル (LRC またはプレーンテキスト)")
-    p_analyze.add_argument("--vocaloid", action="store_true", help="歌詞検索で NetEase を優先する")
-    p_analyze.add_argument("--model", default="htdemucs", help="分離モデル (htdemucs / htdemucs_ft)")
-    p_analyze.add_argument("--device", default=None, choices=["mps", "cuda", "cpu"], help="計算デバイス (既定: 自動)")
-    p_analyze.add_argument("--skip-separation", action="store_true", help="音源分離を省略する (高速・低品質)")
     p_analyze.add_argument(
-        "--enhance-vocals", action="store_true",
+        "--lyrics", default=None, help="歌詞ファイル (LRC またはプレーンテキスト)"
+    )
+    p_analyze.add_argument("--vocaloid", action="store_true", help="歌詞検索で NetEase を優先する")
+    p_analyze.add_argument(
+        "--model", default="htdemucs", help="分離モデル (htdemucs / htdemucs_ft)"
+    )
+    p_analyze.add_argument(
+        "--device", default=None, choices=["mps", "cuda", "cpu"], help="計算デバイス (既定: 自動)"
+    )
+    p_analyze.add_argument(
+        "--skip-separation", action="store_true", help="音源分離を省略する (高速・低品質)"
+    )
+    p_analyze.add_argument(
+        "--enhance-vocals",
+        action="store_true",
         help="分離ボーカルにハモリ・残響除去を掛ける (要: uv sync --extra enhance)",
     )
     p_analyze.add_argument(
-        "--karaoke-model", default=None, metavar="MODEL",
+        "--karaoke-model",
+        default=None,
+        metavar="MODEL",
         help="enhance 1 段目 (ハモリ除去) のモデルファイル名。'none' でスキップ "
         "(一覧: uv run audio-separator --list_models)",
     )
     p_analyze.add_argument(
-        "--dereverb-model", default=None, metavar="MODEL",
+        "--dereverb-model",
+        default=None,
+        metavar="MODEL",
         help="enhance 2 段目 (残響除去) のモデルファイル名。'none' でスキップ",
     )
     p_analyze.add_argument(
-        "--refine-align", action="store_true",
+        "--refine-align",
+        action="store_true",
         help="強制アラインメントで word/char 時刻を実測値に補正する (要: uv sync --extra refine)",
     )
     p_analyze.add_argument(
-        "--refine-model", default=None, metavar="MODEL",
+        "--refine-model",
+        default=None,
+        metavar="MODEL",
         help="refine の CTC アラインメントモデル (HuggingFace ID)",
     )
     p_analyze.add_argument(
-        "--refine-pad", type=int, default=None, metavar="MS",
+        "--refine-pad",
+        type=int,
+        default=None,
+        metavar="MS",
         help="refine の行窓の探索パディング。LRC が全体的にずれている曲は広げる (既定: 400)",
     )
     p_analyze.add_argument(
-        "--refine-min-match", type=float, default=None, metavar="X",
+        "--refine-min-match",
+        type=float,
+        default=None,
+        metavar="X",
         help="行を補正する最低マッチ率 0〜1 (既定: 0.5)",
     )
     p_analyze.add_argument(
-        "--refine-min-score", type=float, default=None, metavar="X",
+        "--refine-min-score",
+        type=float,
+        default=None,
+        metavar="X",
         help="この文字スコア未満の実測は潰れとして捨てる 0〜1 (既定: 0.35)",
     )
     p_analyze.add_argument(
-        "--refine-max-squashed", type=int, default=None, metavar="N",
+        "--refine-max-squashed",
+        type=int,
+        default=None,
+        metavar="N",
         help="行中間で許容する潰れ実測の数。超えた行は按分のまま (既定: 1)",
     )
 
@@ -96,13 +132,19 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 
     missing = check_external_tools()
     if missing:
-        print(f"必要な外部コマンドが見つかりません: {', '.join(missing)} (brew install ffmpeg)", file=sys.stderr)
+        print(
+            f"必要な外部コマンドが見つかりません: {', '.join(missing)} (brew install ffmpeg)",
+            file=sys.stderr,
+        )
         return 1
 
     # source 省略時は対話モードとみなす。
     interactive = args.interactive or args.source is None
     if interactive and not sys.stdin.isatty():
-        print("対話モードには端末 (TTY) が必要です。source を指定し -i を外して実行してください。", file=sys.stderr)
+        print(
+            "対話モードには端末 (TTY) が必要です。source を指定し -i を外して実行してください。",
+            file=sys.stderr,
+        )
         return 1
 
     source = args.source
@@ -135,9 +177,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         "max_squashed_mid_chars": args.refine_max_squashed,
     }
     try:
-        refine_params = RefineParams(
-            **{k: v for k, v in refine_overrides.items() if v is not None}
-        )
+        refine_params = RefineParams(**{k: v for k, v in refine_overrides.items() if v is not None})
     except ValueError as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
@@ -178,7 +218,9 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     except (FetchError, SeparationError, EnhanceError, RefineError) as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
-    print(f"完了: {result.json_path} (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})")
+    print(
+        f"完了: {result.json_path} (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})"
+    )
     return 0
 
 

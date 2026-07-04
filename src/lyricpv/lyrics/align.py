@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from ..schema import AmplitudePoint, Char, Phrase, Word
 from .lrc import LyricLine, is_synced, is_word_synced
-from .morph import MorphWord, analyze_line
 from .mora import SMALL_KANA, is_kana
+from .morph import MorphWord, analyze_line
 
 # 1 モーラあたりの歌唱時間の上限 (これ以上は間奏とみなし行を切り上げる)
 _MAX_MS_PER_MORA = 500

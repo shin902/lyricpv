@@ -13,14 +13,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-import soundfile as sf
-
 # torch のロード前に PYTORCH_ENABLE_MPS_FALLBACK を設定する必要があるため、
-# device モジュールを必ず先に import する (device.py の docstring 参照)
-from .device import pick_device
+# device モジュールを必ず先に import する (device.py の docstring 参照)。
+from .device import pick_device  # isort: skip
 
-import torch  # noqa: E402
+import soundfile as sf
+import torch
 
 DEFAULT_MODEL = "htdemucs"
 
@@ -117,7 +115,5 @@ def separate(
 
 def _apply(apply_model, model, wav: torch.Tensor, device: torch.device) -> torch.Tensor:
     with torch.no_grad():
-        out = apply_model(
-            model, wav[None], device=device, split=True, overlap=0.25, progress=False
-        )
+        out = apply_model(model, wav[None], device=device, split=True, overlap=0.25, progress=False)
     return out[0].cpu()  # (sources, ch, time)

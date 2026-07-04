@@ -146,9 +146,7 @@ def refine_phrases(
             }
             for p in phrases
         ]
-        result = whisperx.align(
-            segments, model, metadata, audio, dev, return_char_alignments=True
-        )
+        result = whisperx.align(segments, model, metadata, audio, dev, return_char_alignments=True)
     except Exception as e:  # モデル取得失敗・推論エラー等は依存側の例外型が不定
         raise RefineError(f"強制アラインメントに失敗しました: {e}") from e
 
@@ -287,14 +285,21 @@ def _apply_char_times(
     if squashed_mid > squash_limit:
         logger.debug(
             "棄却 [squashed_mid=%d > %d (n_sung=%d)]: %s",
-            squashed_mid, squash_limit, n_sung, phrase.text,
+            squashed_mid,
+            squash_limit,
+            n_sung,
+            phrase.text,
         )
         return False
     min_needed = max(1, int(n_sung * params.min_match_ratio))
     if matched < min_needed:
         logger.debug(
             "棄却 [match=%d/%d < %d (%.0f%%)]: %s",
-            matched, n_sung, min_needed, params.min_match_ratio * 100, phrase.text,
+            matched,
+            n_sung,
+            min_needed,
+            params.min_match_ratio * 100,
+            phrase.text,
         )
         return False
 
@@ -302,7 +307,9 @@ def _apply_char_times(
     if window_start is not None and first_matched[0] <= window_start + _EDGE_EPS_MS:
         logger.debug(
             "棄却 [edge_eps: first=%dms <= window_start+eps=%dms]: %s",
-            first_matched[0], window_start + _EDGE_EPS_MS, phrase.text,
+            first_matched[0],
+            window_start + _EDGE_EPS_MS,
+            phrase.text,
         )
         return False
 
@@ -316,7 +323,9 @@ def _apply_char_times(
     if filled[0][0] < min_start:
         logger.debug(
             "棄却 [min_start: filled[0]=%dms < min_start=%dms]: %s",
-            filled[0][0], min_start, phrase.text,
+            filled[0][0],
+            min_start,
+            phrase.text,
         )
         return False
 
@@ -329,13 +338,18 @@ def _apply_char_times(
         if crossing > n_filled // 2:
             logger.debug(
                 "棄却 [crossing=%d > %d (半数超), next_start=%dms]: %s",
-                crossing, n_filled // 2, next_start, phrase.text,
+                crossing,
+                n_filled // 2,
+                next_start,
+                phrase.text,
             )
             return False
         if crossing > 0:
             logger.debug(
                 "clamp [crossing=%d, next_start=%dms]: %s",
-                crossing, next_start, phrase.text,
+                crossing,
+                next_start,
+                phrase.text,
             )
             for ci in range(n_filled):
                 s, e = filled[ci]
@@ -344,7 +358,10 @@ def _apply_char_times(
 
     logger.debug(
         "補正 [match=%d/%d, squashed_mid=%d]: %s",
-        matched, n_sung, squashed_mid, phrase.text,
+        matched,
+        n_sung,
+        squashed_mid,
+        phrase.text,
     )
     k = 0
     for w in phrase.words:

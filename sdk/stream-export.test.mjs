@@ -12,7 +12,12 @@ import { Player, manualClockAdapter } from "./lyric-player.mjs";
 
 function fixture() {
   return {
-    song: { title: "t", artist: "a", durationMs: 100, source: { type: "file", id: "t.wav", offsetMs: 0 } },
+    song: {
+      title: "t",
+      artist: "a",
+      durationMs: 100,
+      source: { type: "file", id: "t.wav", offsetMs: 0 },
+    },
     phrases: [],
   };
 }
@@ -29,7 +34,7 @@ test("recordCanvasStream: MediaRecorder 未定義の環境では StreamExportErr
   const { player, clock } = await loadedPlayer();
   await assert.rejects(
     () => recordCanvasStream(player, clock, { canvas: { captureStream: () => ({}) } }),
-    StreamExportError
+    StreamExportError,
   );
 });
 
@@ -40,7 +45,7 @@ test("recordCanvasStream: canvas.captureStream が無い場合は StreamExportEr
     const { player, clock } = await loadedPlayer();
     await assert.rejects(
       () => recordCanvasStream(player, clock, { canvas: {} }),
-      StreamExportError
+      StreamExportError,
     );
   } finally {
     if (original === undefined) {
@@ -56,10 +61,7 @@ test("recordCanvasStream: canvas が未指定の場合も StreamExportError(capt
   globalThis.MediaRecorder = class {};
   try {
     const { player, clock } = await loadedPlayer();
-    await assert.rejects(
-      () => recordCanvasStream(player, clock, {}),
-      StreamExportError
-    );
+    await assert.rejects(() => recordCanvasStream(player, clock, {}), StreamExportError);
   } finally {
     if (original === undefined) {
       delete globalThis.MediaRecorder;
@@ -79,7 +81,13 @@ test("recordCanvasStream: MediaRecorder 構築失敗時はトラックを停止�
   let stopped = false;
   const canvas = {
     captureStream: () => ({
-      getTracks: () => [{ stop: () => { stopped = true; } }],
+      getTracks: () => [
+        {
+          stop: () => {
+            stopped = true;
+          },
+        },
+      ],
     }),
   };
   try {
@@ -112,15 +120,18 @@ test("recordCanvasStream: MediaRecorder 開始失敗時はトラックを停止�
   let stopped = false;
   const canvas = {
     captureStream: () => ({
-      getTracks: () => [{ stop: () => { stopped = true; } }],
+      getTracks: () => [
+        {
+          stop: () => {
+            stopped = true;
+          },
+        },
+      ],
     }),
   };
   try {
     const { player, clock } = await loadedPlayer();
-    await assert.rejects(
-      recordCanvasStream(player, clock, { canvas }),
-      /unsupported stream/
-    );
+    await assert.rejects(recordCanvasStream(player, clock, { canvas }), /unsupported stream/);
     assert.equal(stopped, true);
   } finally {
     if (original === undefined) {

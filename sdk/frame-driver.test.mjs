@@ -34,10 +34,19 @@ test("frameTimestamps: fps が不正なら例外", () => {
 
 test("frameTimestamps: 浮動小数点誤差で末尾フレームが重複しない", () => {
   // durationMs/frameDurationMs が割り切れず round() が durationMs に複数回到達しうる組み合わせ
-  for (const [durationMs, fps] of [[667, 3], [167, 6], [143, 7], [100, 30]]) {
+  for (const [durationMs, fps] of [
+    [667, 3],
+    [167, 6],
+    [143, 7],
+    [100, 30],
+  ]) {
     const timestamps = frameTimestamps(durationMs, fps);
     assert.equal(timestamps.at(-1), durationMs);
-    assert.notEqual(timestamps.at(-2), timestamps.at(-1), `dup at duration=${durationMs} fps=${fps}`);
+    assert.notEqual(
+      timestamps.at(-2),
+      timestamps.at(-1),
+      `dup at duration=${durationMs} fps=${fps}`,
+    );
   }
 });
 
@@ -57,7 +66,10 @@ test("renderFrames: 各フレームで clock を seek し timeupdate 順に onFr
   assert.equal(frameCount, seen.length);
   assert.equal(seen[0].ms, 0);
   assert.equal(seen.at(-1).ms, 100);
-  assert.deepEqual(seen.map((f) => f.index), seen.map((_, i) => i));
+  assert.deepEqual(
+    seen.map((f) => f.index),
+    seen.map((_, i) => i),
+  );
   for (let i = 1; i < seen.length; i += 1) {
     assert.ok(seen[i].ms >= seen[i - 1].ms, "ms は単調増加であること");
   }
@@ -129,6 +141,6 @@ test("renderFrames: clock に seekTo がなければ例外", async () => {
 
   await assert.rejects(
     () => renderFrames(player, {}, { fps: 30, onFrame: () => {} }),
-    /manualClockAdapter/
+    /manualClockAdapter/,
   );
 });

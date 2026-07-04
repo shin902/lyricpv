@@ -10,9 +10,9 @@ import types
 import pytest
 
 from lyricpv.refine import (
-    DEFAULT_ALIGN_MODEL,
     _MAX_LAST_CHAR_MS,
     _TYPICAL_CHAR_MS,
+    DEFAULT_ALIGN_MODEL,
     AlignedChar,
     RefineError,
     RefineParams,
@@ -372,7 +372,9 @@ def test_refine_without_dependency_raises_with_install_hint(tmp_path, monkeypatc
         refine_phrases([make_phrase(["夜"], 0, 1_000)], tmp_path / "vocals.wav")
 
 
-def test_pipeline_records_refine_model_in_meta(fake_whisperx, tmp_path, synth_wav_path, monkeypatch):
+def test_pipeline_records_refine_model_in_meta(
+    fake_whisperx, tmp_path, synth_wav_path, monkeypatch
+):
     """--refine-align 相当のオプションで meta.json に補正モデルが残る。"""
     import json
     import shutil

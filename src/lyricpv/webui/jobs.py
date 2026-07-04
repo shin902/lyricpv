@@ -122,7 +122,9 @@ class JobManager:
                 with job.lock:
                     job.status = "done"
                     job.song_id = out_dir.name
-                    job.message = f"完了 (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})"
+                    job.message = (
+                        f"完了 (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})"
+                    )
             except Exception as e:  # ジョブの失敗は API 経由でユーザーに見せる
                 with job.lock:
                     job.status = "error"
