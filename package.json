@@ -1,0 +1,26 @@
+{
+  "name": "lyricpv",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "npm run lint:js && npm run lint:py",
+    "lint:js": "eslint \"sdk/**/*.{js,mjs,ts}\"",
+    "lint:py": "uv run ruff check src tests",
+    "format": "npm run format:js && npm run format:py",
+    "format:check": "npm run format:check:js && npm run format:check:py",
+    "format:js": "prettier --write \"sdk/**/*.{js,mjs,ts}\"",
+    "format:check:js": "prettier --check \"sdk/**/*.{js,mjs,ts}\"",
+    "format:py": "uv run ruff format src tests",
+    "format:check:py": "uv run ruff format --check src tests",
+    "test:js": "node --test sdk/*.test.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.1"
+  }
+}
