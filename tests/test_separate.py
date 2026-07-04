@@ -5,6 +5,9 @@
 """
 
 import os
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
@@ -23,6 +26,29 @@ def test_pick_device_returns_valid_device():
 
 def test_pick_device_cpu_forced():
     assert pick_device("cpu").type == "cpu"
+
+
+def test_separate_sets_mps_fallback_before_importing_torch():
+    script = textwrap.dedent(
+        """
+        import importlib.abc
+        import os
+        import sys
+
+        class TorchImportObserver(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path, target=None):
+                if fullname == "torch":
+                    assert os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK") == "1"
+                return None
+
+        sys.meta_path.insert(0, TorchImportObserver())
+        import lyricpv.separate
+        """
+    )
+    env = os.environ.copy()
+    env.pop("PYTORCH_ENABLE_MPS_FALLBACK", None)
+
+    subprocess.run([sys.executable, "-c", script], env=env, check=True)
 
 
 @requires_separation

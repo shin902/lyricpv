@@ -13,12 +13,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import soundfile as sf
-import torch  # noqa: E402
-
 # torch のロード前に PYTORCH_ENABLE_MPS_FALLBACK を設定する必要があるため、
-# device モジュールを必ず先に import する (device.py の docstring 参照)
-from .device import pick_device
+# device モジュールを必ず先に import する (device.py の docstring 参照)。
+from .device import pick_device  # isort: skip
+
+import soundfile as sf
+import torch
 
 DEFAULT_MODEL = "htdemucs"
 
