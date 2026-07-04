@@ -125,6 +125,6 @@ source(URL/ファイル)
 - コードはトライアド 24 種のみ(7th 等は最近傍のトライアドに丸まる)
 - 歌詞検索のカバレッジは syncedlyrics のプロバイダ依存(ボカロは `--vocaloid` で NetEase 優先)
 - YouTube IFrame 同期アダプタは未実装
-- MP4 書き出しは `sdk/frame-driver.mjs`(環境非依存のフレーム駆動)+ `sdk/ffmpeg-export.mjs`(Node、連番フレーム+音源→ffmpeg合成、フレーム精度優先)/ `sdk/stream-export.mjs`(ブラウザ、OffscreenCanvas+MediaRecorder、実時間駆動で簡便だがジッタの余地あり)を実装済み。レンダリング自体(Canvas等への描画・ピクセル保存)は依然利用者の責務
+- MP4 書き出しは `sdk/frame-driver.mjs`(環境非依存のフレーム駆動)+ `sdk/ffmpeg-export.mjs`(Node、連番フレーム+音源→ffmpeg合成、フレーム精度優先)/ `sdk/stream-export.mjs`(ブラウザ、HTMLCanvasElement+MediaRecorder、実時間駆動で簡便だがジッタの余地あり)を実装済み。レンダリング自体(Canvas等への描画・ピクセル保存)は依然利用者の責務
 - 強制アラインメント(4a)は opt-in。既定経路の T1/T2 行内按分は依然モーラ比の推定(#3・#6 の根本解決は `--refine-align` を使う)
 - `--refine-align` は LRC の行時刻を ±400ms までしか補正しない。行時刻自体が大きくずれた LRC はソース差し替えか手動修正が必要

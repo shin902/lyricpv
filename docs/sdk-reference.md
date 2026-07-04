@@ -97,7 +97,7 @@ interface AudioAdapter {
 | 関数 | 説明 |
 |---|---|
 | `frameTimestamps(durationMs, fps)` | 0〜durationMs を fps 刻みで分割したタイムスタンプ列(末尾フレーム含む) |
-| `renderFrames(player, clock, {fps, onFrame})` | `clock.seekTo(ms)` → `player.tick()` → `await onFrame({index, ms, frameCount})` をフレーム数分繰り返す。`clock` は `manualClockAdapter()` の戻り値 |
+| `renderFrames(player, clock, {fps, onFrame})` | `player.seek(ms)` → `await onFrame({index, ms, frameCount})` をフレーム数分繰り返す。`seek()` が `offsetMs` を補正し `timeupdate` を発火する。`clock` は `manualClockAdapter()` の戻り値 |
 
 ### `sdk/ffmpeg-export.mjs`(Node 専用、ffmpeg パイプライン経路。フレーム精度優先)
 
@@ -142,7 +142,7 @@ await exportFramesToMp4(player, clock, {
 
 | 関数 | 説明 |
 |---|---|
-| `recordCanvasStream(player, clock, {canvas, fps, mimeType, onFrame})` | `OffscreenCanvas.captureStream()` + `MediaRecorder` で WebM の `Blob` を返す。映像のみのため音源は `muxVideoAudio()` で後付け |
+| `recordCanvasStream(player, clock, {canvas, fps, mimeType, onFrame})` | `HTMLCanvasElement.captureStream()` + `MediaRecorder` で WebM の `Blob` を返す(`OffscreenCanvas` は非対応)。映像のみのため音源は `muxVideoAudio()` で後付け |
 
 ## 最小利用例
 
