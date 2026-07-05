@@ -208,6 +208,33 @@ lyrics_file = "lyrics.lrc"
     assert load_song_config(other_dir).lyrics_file == "lyrics.lrc"
 
 
+def test_analyze_with_lyrics_option_preserves_original_extension(monkeypatch, tmp_path):
+    """--lyrics で渡した外部歌詞ファイルは、拡張子を保ったまま out_dir にコピーされる
+    (プレーンテキスト歌詞を lyrics.lrc という誤った名前で保存しないため)。"""
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    lyrics_content = "てすと歌詞\n"
+    lyrics_path = tmp_path / "lyrics.txt"
+    lyrics_path.write_text(lyrics_content, encoding="utf-8")
+
+    def fake_run(source, out_dir_arg, *, options, **kwargs):
+        out_dir_arg.mkdir(parents=True, exist_ok=True)
+        return _DummyResult()
+
+    monkeypatch.setattr(pipeline_mod, "run", fake_run)
+
+    out_dir = tmp_path / "out"
+    code = cli_mod.main(
+        ["analyze", "song.wav", "-o", str(out_dir), "--lyrics", str(lyrics_path)]
+    )
+
+    assert code == 0
+    copied = out_dir / "lyrics.txt"
+    assert copied.is_file()
+    assert copied.read_text(encoding="utf-8") == lyrics_content
+    assert load_song_config(out_dir).lyrics_file == "lyrics.txt"
+
+
 def test_analyze_directory_without_source_in_toml_errors(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
 

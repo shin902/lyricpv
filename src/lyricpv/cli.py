@@ -278,11 +278,13 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     lyrics_file_to_save = effective.lyrics_file
     if args.lyrics:
         # 外部歌詞ファイルは out_dir にコピーして再現性を閉じる
+        # (拡張子は元ファイルのものを維持し、ファイル名と実体の食い違いを防ぐ)
         src = Path(args.lyrics).resolve()
-        dst = (out_dir / "lyrics.lrc").resolve()
+        lyrics_filename = f"lyrics{src.suffix or '.txt'}"
+        dst = (out_dir / lyrics_filename).resolve()
         if src != dst:
             shutil.copyfile(src, dst)
-        lyrics_file_to_save = "lyrics.lrc"
+        lyrics_file_to_save = lyrics_filename
     elif toml_dir is not None and effective.lyrics_file is not None:
         # song.toml から再解析しつつ -o で別の出力先を指定した場合、歌詞ファイルの
         # 参照が toml_dir 基準のままだと out_dir 側から解決できなくなる。
