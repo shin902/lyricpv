@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import shutil
 import sys
 from pathlib import Path
 
@@ -25,10 +24,7 @@ def main(argv: list[str] | None = None) -> int:
         "source",
         nargs="?",
         default=None,
-        help=(
-            "YouTube URL / 音声ファイルのパス / song.toml を含む出力ディレクトリ "
-            "(省略時は対話入力)"
-        ),
+        help="YouTube URL または音声ファイルのパス (省略時は対話入力)",
     )
     p_analyze.add_argument(
         "-i",
@@ -46,10 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_analyze.add_argument("--vocaloid", action="store_true", help="歌詞検索で NetEase を優先する")
     p_analyze.add_argument(
-        "--model",
-        default=None,
-        metavar="MODEL",
-        help="分離モデル (htdemucs / htdemucs_ft) (既定: htdemucs)",
+        "--model", default="htdemucs", help="分離モデル (htdemucs / htdemucs_ft)"
     )
     p_analyze.add_argument(
         "--device", default=None, choices=["mps", "cuda", "cpu"], help="計算デバイス (既定: 自動)"
@@ -131,23 +124,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
-    from .config import (
-        SONG_TOML_FILENAME,
-        ConfigError,
-        EnhanceConfig,
-        RefineConfig,
-        SeparationConfig,
-        SongConfig,
-        effective_config_from_options,
-        load_song_config,
-        merge_configs,
-        save_song_config,
-        to_pipeline_options,
-    )
-    from .enhance import EnhanceError
+    from .enhance import DEFAULT_DEREVERB_MODEL, DEFAULT_KARAOKE_MODEL, EnhanceError
     from .fetch import FetchError, check_external_tools, extract_youtube_id, is_url
-    from .pipeline import run
-    from .refine import RefineError
+    from .pipeline import PipelineOptions, run
+    from .refine import RefineError, RefineParams
     from .separate import SeparationError
 
     missing = check_external_tools()
@@ -174,39 +154,12 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             print("ソースが指定されていません。", file=sys.stderr)
             return 1
 
-    # source が song.toml (を含むディレクトリ) を指す場合、そこから設定を読み込んで
-    # 再解析する (`lyricpv analyze data/songs/mysong/`)。
-    toml_dir: Path | None = None
-    toml_config: SongConfig | None = None
-    if not is_url(source):
-        candidate = Path(source)
-        toml_path = candidate / SONG_TOML_FILENAME if candidate.is_dir() else candidate
-        if candidate.is_dir() and not toml_path.is_file():
-            print(
-                f"エラー: ディレクトリが指定されましたが song.toml がありません: {candidate}",
-                file=sys.stderr,
-            )
-            return 1
-        if toml_path.name == SONG_TOML_FILENAME and toml_path.is_file():
-            try:
-                toml_config = load_song_config(toml_path)
-            except ConfigError as e:
-                print(f"エラー: {e}", file=sys.stderr)
-                return 1
-            if not toml_config.source:
-                print(f"エラー: {toml_path} に source が指定されていません。", file=sys.stderr)
-                return 1
-            toml_dir = toml_path.parent
-            source = toml_config.source
-
     lyrics_text = None
     if args.lyrics:
         lyrics_text = Path(args.lyrics).read_text(encoding="utf-8")
 
     if args.out_dir:
         out_dir = Path(args.out_dir)
-    elif toml_dir is not None:
-        out_dir = toml_dir
     else:
         if is_url(source):
             # 動画 ID で曲ごとに分ける (固定名だと2曲目が1曲目を上書きする)
@@ -215,41 +168,34 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             stem = Path(source).stem
         out_dir = Path("data/songs") / stem
 
-    # CLI フラグは指定されたものだけ song.toml を上書きする (None = 未指定)。
-    # store_true な opt-in フラグ (vocaloid 等) は False が既定のため、指定時
-    # (True) のみ上書き対象にする (未指定と明示的無効化を区別できないため)。
-    cli_config = SongConfig(
-        title=args.title,
-        artist=args.artist,
-        vocaloid=True if args.vocaloid else None,
-        separation=SeparationConfig(
-            model=args.model,
-            device=args.device,
-            skip=True if args.skip_separation else None,
-        ),
-        enhance=EnhanceConfig(
-            enabled=True if args.enhance_vocals else None,
-            karaoke_model=args.karaoke_model,
-            dereverb_model=args.dereverb_model,
-        ),
-        refine=RefineConfig(
-            enabled=True if args.refine_align else None,
-            model=args.refine_model,
-            pad_ms=args.refine_pad,
-            min_match_ratio=args.refine_min_match,
-            min_char_score=args.refine_min_score,
-            max_squashed_mid_chars=args.refine_max_squashed,
-        ),
-    )
-    effective = merge_configs(toml_config or SongConfig(), cli_config)
-
+    # 指定されたフラグだけ既定値を上書きする (None = 未指定)
+    refine_overrides = {
+        "model_name": args.refine_model,
+        "pad_ms": args.refine_pad,
+        "min_match_ratio": args.refine_min_match,
+        "min_char_score": args.refine_min_score,
+        "max_squashed_mid_chars": args.refine_max_squashed,
+    }
     try:
-        options = to_pipeline_options(
-            effective, base_dir=toml_dir or out_dir, lyrics_text=lyrics_text
-        )
-    except ConfigError as e:
+        refine_params = RefineParams(**{k: v for k, v in refine_overrides.items() if v is not None})
+    except ValueError as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
+
+    options = PipelineOptions(
+        title=args.title,
+        artist=args.artist,
+        lyrics_text=lyrics_text,
+        vocaloid=args.vocaloid,
+        separation_model=args.model,
+        device=args.device,
+        skip_separation=args.skip_separation,
+        enhance_vocals=args.enhance_vocals,
+        enhance_karaoke_model=_model_flag(args.karaoke_model, DEFAULT_KARAOKE_MODEL),
+        enhance_dereverb_model=_model_flag(args.dereverb_model, DEFAULT_DEREVERB_MODEL),
+        refine_align=args.refine_align,
+        refine_params=refine_params,
+    )
 
     def progress(stage: str, message: str) -> None:
         print(f"  [{stage}] {message}", file=sys.stderr)
@@ -272,45 +218,19 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     except (FetchError, SeparationError, EnhanceError, RefineError) as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
-
-    # 再現性のため、実際に使った有効設定を out_dir/song.toml に書き出す。
-    # 次回から `lyricpv analyze <out_dir>` で同条件の再解析ができる。
-    lyrics_file_to_save = effective.lyrics_file
-    if args.lyrics:
-        # 外部歌詞ファイルは out_dir にコピーして再現性を閉じる
-        # (拡張子は元ファイルのものを維持し、ファイル名と実体の食い違いを防ぐ)
-        src = Path(args.lyrics).resolve()
-        lyrics_filename = f"lyrics{src.suffix or '.txt'}"
-        dst = (out_dir / lyrics_filename).resolve()
-        if src != dst:
-            shutil.copyfile(src, dst)
-        lyrics_file_to_save = lyrics_filename
-    elif toml_dir is not None and effective.lyrics_file is not None:
-        # song.toml から再解析しつつ -o で別の出力先を指定した場合、歌詞ファイルの
-        # 参照が toml_dir 基準のままだと out_dir 側から解決できなくなる。
-        # 同じ相対パス名で out_dir にもコピーし、再現性を保つ。
-        src = (toml_dir / effective.lyrics_file).resolve()
-        dst = (out_dir / effective.lyrics_file).resolve()
-        if src != dst:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, dst)
-    # ローカルファイルの source は絶対パスに正規化して保存する。
-    # 相対パスのまま song.toml に残すと、別の cwd から再解析したときに
-    # ファイルが見つからなくなる。
-    source_to_save = str(Path(source).resolve()) if not is_url(source) else source
-    saved_config = effective_config_from_options(
-        options,
-        source=source_to_save,
-        lyrics_file=lyrics_file_to_save,
-        title=result.meta.get("title"),
-        artist=result.meta.get("artist"),
-    )
-    save_song_config(out_dir / SONG_TOML_FILENAME, saved_config)
-
     print(
         f"完了: {result.json_path} (歌詞 Tier: {result.lyrics_tier}, デバイス: {result.device_used})"
     )
     return 0
+
+
+def _model_flag(value: str | None, default: str | None) -> str | None:
+    """モデル指定フラグを解決する。未指定なら既定値、'none' ならその段をスキップ。"""
+    if value is None:
+        return default
+    if value.strip().lower() == "none":
+        return None
+    return value
 
 
 def _prompt(label: str, default: str | None = None) -> str:
