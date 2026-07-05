@@ -272,7 +272,10 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     lyrics_file_to_save = effective.lyrics_file
     if args.lyrics:
         # 外部歌詞ファイルは out_dir にコピーして再現性を閉じる
-        shutil.copyfile(args.lyrics, out_dir / "lyrics.lrc")
+        src = Path(args.lyrics).resolve()
+        dst = (out_dir / "lyrics.lrc").resolve()
+        if src != dst:
+            shutil.copyfile(src, dst)
         lyrics_file_to_save = "lyrics.lrc"
     saved_config = effective_config_from_options(
         options, source=source, lyrics_file=lyrics_file_to_save
