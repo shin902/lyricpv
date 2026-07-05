@@ -154,6 +154,17 @@ test("load は schemaVersion のメジャーバージョン不一致で警告す
   assert.match(warnings[0], /schemaVersion/);
 });
 
+test("load は schemaVersion が非文字列の場合に警告する", async () => {
+  const player = new Player();
+  const json = { ...fixture(), schemaVersion: 2 };
+  const warnings = await captureWarnings(() =>
+    player.load(json, manualClockAdapter(60_000)),
+  );
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /schemaVersion/);
+  assert.match(warnings[0], /文字列/);
+});
+
 test("findBeat は直近の拍を返す", async () => {
   const { player } = await loadedPlayer();
   assert.equal(player.findBeat(0).position, 1);
