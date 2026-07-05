@@ -295,8 +295,8 @@ def _get_lyrics(title: str, artist: str, options: PipelineOptions) -> tuple[list
     if options.lyrics_text:
         return parse_user_text(options.lyrics_text)
 
-    # ネットワーク検索は module 属性の fetch_lyrics 経由で行う
-    # (テストでの monkeypatch 差し替えを可能にするため直接呼び出す)。
+    # fetch_lyrics は呼び出し時にモジュールグローバルとして解決されるため、
+    # テストは lyricpv.pipeline.fetch_lyrics を monkeypatch で差し替えられる。
     lrc, tier = fetch_lyrics(title, artist, vocaloid=options.vocaloid)
     if lrc is None:
         return [], tier
