@@ -294,9 +294,13 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         if src != dst:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
+    # ローカルファイルの source は絶対パスに正規化して保存する。
+    # 相対パスのまま song.toml に残すと、別の cwd から再解析したときに
+    # ファイルが見つからなくなる。
+    source_to_save = str(Path(source).resolve()) if not is_url(source) else source
     saved_config = effective_config_from_options(
         options,
-        source=source,
+        source=source_to_save,
         lyrics_file=lyrics_file_to_save,
         title=result.meta.get("title"),
         artist=result.meta.get("artist"),

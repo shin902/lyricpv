@@ -1,5 +1,7 @@
 """CLI のエラーハンドリングのテスト。"""
 
+from pathlib import Path
+
 import lyricpv.cli as cli_mod
 import lyricpv.fetch as fetch_mod
 import lyricpv.pipeline as pipeline_mod
@@ -132,7 +134,11 @@ def test_analyze_writes_song_toml_after_success(monkeypatch, tmp_path):
 
     assert code == 0
     saved = load_song_config(out_dir)
-    assert saved.source == "song.wav"
+    # ローカル source は絶対パスの文字列に正規化されて保存される
+    assert saved.source is not None
+    assert isinstance(saved.source, str)
+    assert Path(saved.source).is_absolute()
+    assert Path(saved.source).name == "song.wav"
     # pipeline で確定した title/artist が song.toml に残る
     assert saved.title == "Test Title"
     assert saved.artist == "Test Artist"
