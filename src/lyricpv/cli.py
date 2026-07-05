@@ -181,6 +181,12 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     if not is_url(source):
         candidate = Path(source)
         toml_path = candidate / SONG_TOML_FILENAME if candidate.is_dir() else candidate
+        if candidate.is_dir() and not toml_path.is_file():
+            print(
+                f"エラー: ディレクトリが指定されましたが song.toml がありません: {candidate}",
+                file=sys.stderr,
+            )
+            return 1
         if toml_path.name == SONG_TOML_FILENAME and toml_path.is_file():
             try:
                 toml_config = load_song_config(toml_path)

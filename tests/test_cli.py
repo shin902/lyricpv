@@ -221,6 +221,18 @@ def test_analyze_directory_without_source_in_toml_errors(monkeypatch, capsys, tm
     assert "source" in capsys.readouterr().err
 
 
+def test_analyze_directory_without_song_toml_errors(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    empty_dir = tmp_path / "mysong"
+    empty_dir.mkdir()
+
+    code = cli_mod.main(["analyze", str(empty_dir)])
+
+    assert code == 1
+    assert "song.toml" in capsys.readouterr().err
+
+
 def test_analyze_cli_flag_overrides_song_toml(monkeypatch, tmp_path):
     """ディレクトリ再解析でも CLI フラグが song.toml の値より優先される。"""
     monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
