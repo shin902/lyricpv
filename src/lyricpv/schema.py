@@ -20,6 +20,11 @@ class SchemaError(ValueError):
     """契約A の JSON が不正なときに送出される。"""
 
 
+#: 契約A の現行バージョン (major.minor の semver 文字列)。
+#: minor: 後方互換な追加のみ / major: 破壊的変更 (既存フィールドの意味変更・削除)。
+SCHEMA_VERSION = "1.0"
+
+
 @dataclass
 class Char:
     start_time: int
@@ -152,6 +157,7 @@ class LyricData:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schemaVersion": SCHEMA_VERSION,
             "song": self.song.to_dict(),
             "phrases": [p.to_dict() for p in self.phrases],
             "beats": [b.to_dict() for b in self.beats],
@@ -242,9 +248,19 @@ def validate(data: dict[str, Any]) -> None:
     """契約A の JSON (dict) を検証し、不正なら SchemaError を送出する。
 
     検証内容: 必須キー、時刻の単調性 (start <= end)、リスト要素の時刻昇順、
-    数値の有限性 (NaN/Infinity 禁止) と値域 (amplitude 0–1 / V-A -1〜1)。
+    数値の有限性 (NaN/Infinity 禁止) と値域 (amplitude 0–1 / V-A -1〜1)、
+    schemaVersion のメジャーバージョン一致 (欠落は既存 JSON との後方互換のため許容)。
     """
     _require(isinstance(data, dict), "ルートはオブジェクトである必要があります")
+    if "schemaVersion" in data:
+        version = data["schemaVersion"]
+        _require(isinstance(version, str), "schemaVersion は文字列である必要があります")
+        major = version.split(".", 1)[0]
+        expected_major = SCHEMA_VERSION.split(".", 1)[0]
+        _require(
+            major == expected_major,
+            f"schemaVersion のメジャーバージョンが不一致です: {version!r} (対応: {expected_major}.x)",
+        )
     song = data.get("song")
     _require(isinstance(song, dict), "song がありません")
     for key in ("title", "artist", "durationMs", "source"):

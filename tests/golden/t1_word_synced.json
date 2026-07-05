@@ -1,0 +1,156 @@
+{
+ "schemaVersion": "1.0",
+ "song": {
+  "title": "月とツクヨミ",
+  "artist": "超かぐや姫！",
+  "durationMs": 8000,
+  "source": {
+   "type": "youtube",
+   "id": "dQw4w9WgXcQ",
+   "offsetMs": 0
+  }
+ },
+ "phrases": [
+  {
+   "startTime": 1000,
+   "endTime": 3000,
+   "text": "夜に光る",
+   "words": [
+    {
+     "startTime": 1000,
+     "endTime": 2000,
+     "text": "夜に",
+     "pos": "名詞",
+     "chars": [
+      {
+       "startTime": 1000,
+       "endTime": 1500,
+       "char": "夜"
+      },
+      {
+       "startTime": 1500,
+       "endTime": 2000,
+       "char": "に"
+      }
+     ]
+    },
+    {
+     "startTime": 2000,
+     "endTime": 3000,
+     "text": "光る",
+     "pos": "動詞",
+     "chars": [
+      {
+       "startTime": 2000,
+       "endTime": 2500,
+       "char": "光"
+      },
+      {
+       "startTime": 2500,
+       "endTime": 3000,
+       "char": "る"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "startTime": 5000,
+   "endTime": 7000,
+   "text": "鏡の中",
+   "words": [
+    {
+     "startTime": 5000,
+     "endTime": 7000,
+     "text": "鏡の中",
+     "pos": "名詞",
+     "chars": [
+      {
+       "startTime": 5000,
+       "endTime": 5666,
+       "char": "鏡"
+      },
+      {
+       "startTime": 5666,
+       "endTime": 6333,
+       "char": "の"
+      },
+      {
+       "startTime": 6333,
+       "endTime": 7000,
+       "char": "中"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "beats": [
+  {
+   "startTime": 0,
+   "position": 1
+  },
+  {
+   "startTime": 500,
+   "position": 2
+  },
+  {
+   "startTime": 1000,
+   "position": 3
+  },
+  {
+   "startTime": 1500,
+   "position": 4
+  }
+ ],
+ "chords": [
+  {
+   "startTime": 0,
+   "endTime": 2000,
+   "name": "C"
+  },
+  {
+   "startTime": 2000,
+   "endTime": 4000,
+   "name": "Am"
+  }
+ ],
+ "segments": [
+  {
+   "startTime": 0,
+   "endTime": 4000,
+   "label": "verse"
+  },
+  {
+   "startTime": 4000,
+   "endTime": 8000,
+   "label": "chorus"
+  }
+ ],
+ "amplitude": [
+  {
+   "time": 0,
+   "value": 0.0
+  },
+  {
+   "time": 1000,
+   "value": 0.8
+  },
+  {
+   "time": 2000,
+   "value": 0.3
+  }
+ ],
+ "valenceArousal": [
+  {
+   "time": 0,
+   "valence": -0.2,
+   "arousal": 0.4
+  },
+  {
+   "time": 2000,
+   "valence": 0.6,
+   "arousal": 0.7
+  }
+ ]
+}

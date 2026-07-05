@@ -121,6 +121,9 @@ function findContaining(items, ms) {
   return ms < item.endTime ? item : null;
 }
 
+/** SDK が対応する契約A schemaVersion のメジャーバージョン。 */
+const SUPPORTED_SCHEMA_MAJOR = "1";
+
 export class Player {
   /**
    * @param {Object} [options]
@@ -148,6 +151,23 @@ export class Player {
   async load(json, audio) {
     if (!json || !json.song || !Array.isArray(json.phrases)) {
       throw new Error("契約Aの形式ではありません: song / phrases がありません");
+    }
+    // schemaVersion 欠落は既存 JSON との後方互換のため無警告で許容する。
+    // 存在して文字列ではない場合は警告 (Python 側は拒否するが、JS 側は警告のみ)。
+    // 存在してメジャーバージョンが不一致の場合も警告 (エラーにはしない: 未知キーは無視して読み進める方針)。
+    if ("schemaVersion" in json) {
+      if (typeof json.schemaVersion !== "string") {
+        console.warn(
+          `契約Aの schemaVersion が文字列ではありません: ${json.schemaVersion} (${typeof json.schemaVersion})`,
+        );
+      } else {
+        const major = json.schemaVersion.split(".", 1)[0];
+        if (major !== SUPPORTED_SCHEMA_MAJOR) {
+          console.warn(
+            `契約Aの schemaVersion (${json.schemaVersion}) はこの SDK の対応バージョン (${SUPPORTED_SCHEMA_MAJOR}.x) と異なります`,
+          );
+        }
+      }
     }
     this._stopTicking();
     this._audio?.pause(); // 再生中の再load: 旧アダプタを止める
