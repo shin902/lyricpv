@@ -175,6 +175,39 @@ pad_ms = 600
     assert captured["options"].refine_params.pad_ms == 600
 
 
+def test_analyze_reanalyze_with_out_dir_copies_lyrics_file(monkeypatch, tmp_path):
+    """song.toml から再解析しつつ -o で別の出力先を指定した場合も、歌詞ファイルを
+    出力先へコピーして再現性を保つ (次回 out_dir から再解析できるようにする)。"""
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    mysong = tmp_path / "mysong"
+    mysong.mkdir()
+    lyrics_content = "[00:01.00]てすと歌詞\n"
+    (mysong / "lyrics.lrc").write_text(lyrics_content, encoding="utf-8")
+    (mysong / "song.toml").write_text(
+        """
+source = "song.wav"
+lyrics_file = "lyrics.lrc"
+""",
+        encoding="utf-8",
+    )
+
+    other_dir = tmp_path / "other_dir"
+
+    def fake_run(source, out_dir_arg, *, options, **kwargs):
+        return _DummyResult()
+
+    monkeypatch.setattr(pipeline_mod, "run", fake_run)
+
+    code = cli_mod.main(["analyze", str(mysong), "-o", str(other_dir)])
+
+    assert code == 0
+    copied = other_dir / "lyrics.lrc"
+    assert copied.is_file()
+    assert copied.read_text(encoding="utf-8") == lyrics_content
+    assert load_song_config(other_dir).lyrics_file == "lyrics.lrc"
+
+
 def test_analyze_directory_without_source_in_toml_errors(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
 

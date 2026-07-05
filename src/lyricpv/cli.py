@@ -277,6 +277,15 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         if src != dst:
             shutil.copyfile(src, dst)
         lyrics_file_to_save = "lyrics.lrc"
+    elif toml_dir is not None and effective.lyrics_file is not None:
+        # song.toml から再解析しつつ -o で別の出力先を指定した場合、歌詞ファイルの
+        # 参照が toml_dir 基準のままだと out_dir 側から解決できなくなる。
+        # 同じ相対パス名で out_dir にもコピーし、再現性を保つ。
+        src = (toml_dir / effective.lyrics_file).resolve()
+        dst = (out_dir / effective.lyrics_file).resolve()
+        if src != dst:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dst)
     saved_config = effective_config_from_options(
         options, source=source, lyrics_file=lyrics_file_to_save
     )
