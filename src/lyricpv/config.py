@@ -162,7 +162,13 @@ def _toml_scalar(value: Any) -> str:
     if isinstance(value, float):
         return repr(value)
     if isinstance(value, str):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        _ESC = {"\\": "\\\\", '"': '\\"', "\b": "\\b", "\t": "\\t",
+                "\n": "\\n", "\f": "\\f", "\r": "\\r"}
+        escaped = "".join(
+            _ESC[c] if c in _ESC
+            else (f"\\u{ord(c):04x}" if ord(c) < 0x20 or ord(c) == 0x7F else c)
+            for c in value
+        )
         return f'"{escaped}"'
     raise ConfigError(f"TOML にシリアライズできない値です: {value!r}")
 
