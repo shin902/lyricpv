@@ -49,6 +49,7 @@ from .separate import DEFAULT_MODEL as DEFAULT_SEPARATION_MODEL
 SONG_TOML_FILENAME = "song.toml"
 
 _TOP_LEVEL_KEYS = {"source", "title", "artist", "vocaloid", "lyrics_file", "separation", "enhance", "refine"}
+_VALID_DEVICES = {"cpu", "mps", "cuda"}
 _SEPARATION_KEYS = {"model", "device", "skip"}
 _ENHANCE_KEYS = {"enabled", "karaoke_model", "dereverb_model"}
 _REFINE_KEYS = {"enabled", "model", "pad_ms", "min_match_ratio", "min_char_score", "max_squashed_mid_chars"}
@@ -210,6 +211,13 @@ def load_song_config(path: str | Path) -> SongConfig:
     _validate_scalar(separation_raw, _SEPARATION_SCHEMA, "separation")
     _validate_scalar(enhance_raw, _ENHANCE_SCHEMA, "enhance")
     _validate_scalar(refine_raw, _REFINE_SCHEMA, "refine")
+
+    # Validate device value (type check above only ensures it's a string)
+    device_val = separation_raw.get("device")
+    if device_val is not None and device_val not in _VALID_DEVICES:
+        raise ConfigError(
+            f"[separation] device は {_VALID_DEVICES!r} のいずれかを指定してください (現在: {device_val!r})"
+        )
 
     return SongConfig(
         source=raw.get("source"),

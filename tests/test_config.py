@@ -200,6 +200,19 @@ min_char_score = "0.5"
         load_song_config(tmp_path)
 
 
+def test_load_song_config_rejects_invalid_device(tmp_path):
+    """device = "cdua" should raise ConfigError, not silently fall through to CPU."""
+    (tmp_path / "song.toml").write_text(
+        """
+[separation]
+device = "cdua"
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="device"):
+        load_song_config(tmp_path)
+
+
 def test_save_then_load_round_trip(tmp_path):
     config = SongConfig(
         source="song.wav",
