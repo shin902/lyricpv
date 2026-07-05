@@ -81,6 +81,21 @@ class SyncedLyricsProvider:
         return None
 
 
+def parse_user_text(lyrics_text: str) -> tuple[list, str]:
+    """ユーザー供給テキストを1回のパースで (LyricLine リスト, tier) に変換する。
+
+    align() の経路選択 (is_word_synced) と同じ基準で Tier を判定する。
+    一部の行のみ逐字タグを持つ LRC は align() 側で T2 経路になるため、
+    T1 と報告すると meta.json と実際の整合が食い違う。
+    """
+    lines = parse_lrc(lyrics_text)
+    if is_synced(lines):
+        tier = "T1" if is_word_synced(lines) else "T2"
+    else:
+        tier = "T3"
+    return lines, tier
+
+
 class UserTextProvider:
     """ユーザー供給の歌詞テキストを Tier 判定してそのまま返す。
 
@@ -93,14 +108,7 @@ class UserTextProvider:
         self._lyrics_text = lyrics_text
 
     def fetch(self, title: str, artist: str) -> LyricsResult | None:
-        lines = parse_lrc(self._lyrics_text)
-        if is_synced(lines):
-            # align() の経路選択 (is_word_synced) と同じ基準で Tier を判定する。
-            # 一部の行のみ逐字タグを持つ LRC は align() 側で T2 経路になるため、
-            # ここで T1 と報告すると meta.json と実際の整合が食い違う。
-            tier = "T1" if is_word_synced(lines) else "T2"
-        else:
-            tier = "T3"
+        _, tier = parse_user_text(self._lyrics_text)
         return LyricsResult(self._lyrics_text, tier)
 
 

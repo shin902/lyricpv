@@ -26,7 +26,7 @@ from .fetch import FetchResult, fetch_youtube, import_file, is_url
 from .lyrics.align import align
 from .lyrics.fetch import fetch_lyrics
 from .lyrics.lrc import LyricLine, parse_lrc
-from .lyrics.providers import build_provider_chain, resolve_lyrics
+from .lyrics.providers import parse_user_text
 from .refine import RefineParams, refine_phrases
 from .schema import LyricData, SongMeta, SongSource
 from .separate import separate
@@ -293,10 +293,7 @@ def _resolve_lyrics(
 def _get_lyrics(title: str, artist: str, options: PipelineOptions) -> tuple[list[LyricLine], str]:
     """歌詞行と Tier を決める。ユーザー供給テキストがあれば優先する。"""
     if options.lyrics_text:
-        # Tier 判定 (T1/T2/T3) は UserTextProvider に委譲する。
-        chain = build_provider_chain(options.lyrics_text, options.vocaloid)
-        result = resolve_lyrics(chain, title, artist)
-        return parse_lrc(result.lrc_text), result.tier
+        return parse_user_text(options.lyrics_text)
 
     # ネットワーク検索は module 属性の fetch_lyrics 経由で行う
     # (テストでの monkeypatch 差し替えを可能にするため直接呼び出す)。
