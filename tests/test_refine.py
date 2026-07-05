@@ -9,16 +9,14 @@ import types
 
 import pytest
 
-from lyricpv.refine import (
+from lyricpv.refine import DEFAULT_ALIGN_MODEL, RefineError, refine_phrases
+from lyricpv.refine_logic import (
     _MAX_LAST_CHAR_MS,
     _TYPICAL_CHAR_MS,
-    DEFAULT_ALIGN_MODEL,
     AlignedChar,
-    RefineError,
     RefineParams,
-    _apply_char_times,
-    _clamp_tail,
-    refine_phrases,
+    apply_char_times,
+    clamp_tail,
 )
 from lyricpv.schema import Char, Phrase, Word
 
@@ -60,7 +58,7 @@ def test_apply_char_times_overwrites_with_measured_values():
         AlignedChar("け", 11_000, 11_200),
         AlignedChar("る", 11_300, 11_600),
     ]
-    assert _apply_char_times(p, aligned)
+    assert apply_char_times(p, aligned)
 
     chars = flat_chars(p)
     assert chars[0].start_time == 10_100
@@ -81,7 +79,7 @@ def test_apply_char_times_interpolates_unrecognized_chars():
         AlignedChar("け", 11_000, 11_200),
         AlignedChar("る", 11_300, 11_600),
     ]
-    assert _apply_char_times(p, aligned)
+    assert apply_char_times(p, aligned)
 
     chars = flat_chars(p)
     kakeru = chars[2]
@@ -97,7 +95,7 @@ def test_apply_char_times_rejects_low_match_ratio():
     before = [(c.start_time, c.end_time) for c in flat_chars(p)]
     aligned = [AlignedChar("あ", 10_100, 10_200), AlignedChar("い", 10_300, 10_400)]
 
-    assert not _apply_char_times(p, aligned)
+    assert not apply_char_times(p, aligned)
     assert [(c.start_time, c.end_time) for c in flat_chars(p)] == before
     assert p.start_time == 10_000  # フレーズ時刻も按分値のまま
 
@@ -105,7 +103,7 @@ def test_apply_char_times_rejects_low_match_ratio():
 def test_apply_char_times_rejects_start_before_previous_phrase():
     p = make_phrase(["夜"], 10_000, 11_000)
     aligned = [AlignedChar("夜", 9_000, 9_500)]
-    assert not _apply_char_times(p, aligned, min_start=9_500)
+    assert not apply_char_times(p, aligned, min_start=9_500)
 
 
 def test_apply_char_times_rejects_window_edge_saturation():
@@ -114,10 +112,10 @@ def test_apply_char_times_rejects_window_edge_saturation():
     p = make_phrase(["夜", "に"], 10_000, 12_000)
     window_start = 9_600
     aligned = [AlignedChar("夜", 9_610, 9_800), AlignedChar("に", 9_900, 10_100)]
-    assert not _apply_char_times(p, aligned, window_start=window_start)
+    assert not apply_char_times(p, aligned, window_start=window_start)
     # 窓の端から十分離れていれば採用される
     aligned_ok = [AlignedChar("夜", 10_200, 10_400), AlignedChar("に", 10_500, 10_700)]
-    assert _apply_char_times(p, aligned_ok, window_start=window_start)
+    assert apply_char_times(p, aligned_ok, window_start=window_start)
 
 
 def test_apply_char_times_does_not_stretch_trailing_punctuation():
@@ -125,7 +123,7 @@ def test_apply_char_times_does_not_stretch_trailing_punctuation():
     行末まで引き伸ばさない (実データで最大 4 秒のギャップが観測された #3)。"""
     p = make_phrase(["はい", "）"], 10_000, 16_000)
     aligned = [AlignedChar("は", 10_100, 10_300), AlignedChar("い", 10_400, 10_600)]
-    assert _apply_char_times(p, aligned)
+    assert apply_char_times(p, aligned)
 
     paren = flat_chars(p)[-1]
     assert paren.char == "）"
@@ -143,7 +141,7 @@ def test_apply_char_times_ignores_measured_times_for_punctuation():
         AlignedChar("い", 10_400, 10_600),
         AlignedChar("）", 15_900, 15_950),  # whisperx の補間値 (信用しない)
     ]
-    assert _apply_char_times(p, aligned)
+    assert apply_char_times(p, aligned)
     paren = flat_chars(p)[-1]
     assert paren.char == "）"
     assert paren.start_time == 10_600
@@ -154,7 +152,7 @@ def test_apply_char_times_caps_silence_absorbed_last_char():
     (実データで 4.3 秒に伸びた「ど」を観測 #3)。"""
     p = make_phrase(["はい"], 10_000, 16_000)
     aligned = [AlignedChar("は", 10_100, 10_300), AlignedChar("い", 10_400, 14_700)]
-    assert _apply_char_times(p, aligned)
+    assert apply_char_times(p, aligned)
     last = flat_chars(p)[-1]
     assert last.end_time == 10_400 + _MAX_LAST_CHAR_MS
     assert p.end_time == last.end_time
@@ -169,7 +167,7 @@ def test_apply_char_times_ignores_squashed_final_char():
         AlignedChar("ろ", 10_400, 11_000, score=0.9),
         AlignedChar("う", 11_000, 11_020, score=0.0),  # 1 フレームの潰れ
     ]
-    assert _apply_char_times(p, aligned)
+    assert apply_char_times(p, aligned)
     u = flat_chars(p)[-1]
     assert u.char == "う"
     assert u.start_time == 11_000  # 「ろ」の実測終了に隣接
@@ -186,7 +184,7 @@ def test_apply_char_times_ignores_low_score_chars():
         AlignedChar("け", 11_000, 11_200, score=0.9),
         AlignedChar("る", 11_300, 11_600, score=0.9),
     ]
-    assert _apply_char_times(p, aligned)
+    assert apply_char_times(p, aligned)
     ni = flat_chars(p)[1]
     assert ni.char == "に"
     # 実測 (10_350) ではなく前後の確定点の間に補間される
@@ -205,7 +203,7 @@ def test_apply_char_times_rejects_collapsed_path():
         AlignedChar("け", 10_340, 10_400, score=0.66),
         AlignedChar("る", 10_400, 10_700, score=0.9),
     ]
-    assert not _apply_char_times(p, aligned)
+    assert not apply_char_times(p, aligned)
     assert [(c.start_time, c.end_time) for c in flat_chars(p)] == before
 
 
@@ -220,7 +218,7 @@ def test_apply_char_times_rejects_heavy_crossing_into_next_phrase():
         AlignedChar("そ", 12_500, 12_700, score=0.9),  # 同上
         AlignedChar("う", 12_700, 12_900, score=0.9),  # 同上 (4 文字中 3 文字 = 半数超)
     ]
-    assert not _apply_char_times(p, aligned, next_start=12_000)
+    assert not apply_char_times(p, aligned, next_start=12_000)
     assert [(c.start_time, c.end_time) for c in flat_chars(p)] == before
 
     # 追い越しが半数以下なら採用し、追い越した文字は next_start に clamp する
@@ -230,7 +228,7 @@ def test_apply_char_times_rejects_heavy_crossing_into_next_phrase():
         AlignedChar("そ", 12_300, 12_500, score=0.9),  # 追い越し (4 文字中 2 文字 = 半数)
         AlignedChar("う", 12_500, 12_700, score=0.9),  # 同上
     ]
-    assert _apply_char_times(p, aligned_ok, next_start=12_000)
+    assert apply_char_times(p, aligned_ok, next_start=12_000)
     # 追い越した「そ」「う」の開始は next_start (12_000) に切り詰められる
     assert [c.start_time for c in flat_chars(p)] == [10_100, 10_400, 12_000, 12_000]
 
@@ -246,7 +244,7 @@ def test_refine_params_can_loosen_collapse_threshold():
         AlignedChar("る", 10_400, 10_700, score=0.9),
     ]
     params = RefineParams(max_squashed_mid_chars=2)
-    assert _apply_char_times(p, aligned, params=params)
+    assert apply_char_times(p, aligned, params=params)
 
 
 def test_refine_params_validation():
@@ -262,7 +260,7 @@ def test_clamp_tail_removes_start_time_inversions():
     """前の行の末尾文字が次の行の頭を追い越したら切り詰める (SDK の二分探索対策)。"""
     prev = make_phrase(["はい", "）"], 10_000, 13_000)
     # 「）」は 12_000 から始まる。次の行が 11_500 に始まり追い越されたとする
-    _clamp_tail(prev, 11_500)
+    clamp_tail(prev, 11_500)
 
     last = flat_chars(prev)[-1]
     assert last.start_time == 11_500
