@@ -22,6 +22,6 @@ def fetch_lyrics(title: str, artist: str, *, vocaloid: bool = False) -> tuple[st
         (lrc_text, tier) — tier は "T1" / "T2" / "T4"。
         T3 (プレーン歌詞) は外部入力経由のためここでは返さない。
     """
-    chain = build_provider_chain(None, vocaloid)
+    chain = build_provider_chain(vocaloid)
     result = resolve_lyrics(chain, title, artist)
     return result.lrc_text, result.tier

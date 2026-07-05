@@ -3,30 +3,24 @@
 from lyricpv.lyrics.providers import (
     LyricsResult,
     SyncedLyricsProvider,
-    UserTextProvider,
     build_provider_chain,
+    parse_user_text,
     resolve_lyrics,
 )
 
 
 def test_build_provider_chain_default_order():
-    chain = build_provider_chain(None, vocaloid=False)
+    chain = build_provider_chain(vocaloid=False)
     assert len(chain) == 1
     assert isinstance(chain[0], SyncedLyricsProvider)
     assert chain[0]._provider_names == ["Lrclib", "NetEase", "Megalobiz", "Genius"]
 
 
 def test_build_provider_chain_vocaloid_prioritizes_netease():
-    chain = build_provider_chain(None, vocaloid=True)
+    chain = build_provider_chain(vocaloid=True)
     assert len(chain) == 1
     assert isinstance(chain[0], SyncedLyricsProvider)
     assert chain[0]._provider_names == ["NetEase", "Lrclib", "Megalobiz", "Genius"]
-
-
-def test_build_provider_chain_prefers_user_text_over_search():
-    chain = build_provider_chain("[00:01.00] 歌詞", vocaloid=True)
-    assert len(chain) == 1
-    assert isinstance(chain[0], UserTextProvider)
 
 
 def test_resolve_lyrics_returns_first_non_none():
@@ -68,29 +62,33 @@ def test_resolve_lyrics_all_miss_yields_t4():
     assert result == LyricsResult(None, "T4")
 
 
-def test_user_text_provider_word_synced_is_t1():
+def test_parse_user_text_word_synced_is_t1():
     lrc = "[00:01.00] <00:01.00> 夜に <00:02.00> 駆ける\n"
-    result = UserTextProvider(lrc).fetch("title", "artist")
-    assert result == LyricsResult(lrc, "T1")
+    lines, tier = parse_user_text(lrc)
+    assert tier == "T1"
+    assert len(lines) == 1
 
 
-def test_user_text_provider_line_synced_is_t2():
+def test_parse_user_text_line_synced_is_t2():
     lrc = "[00:01.00] 夜に駆ける\n"
-    result = UserTextProvider(lrc).fetch("title", "artist")
-    assert result == LyricsResult(lrc, "T2")
+    lines, tier = parse_user_text(lrc)
+    assert tier == "T2"
+    assert len(lines) == 1
 
 
-def test_user_text_provider_partial_word_sync_is_t2():
+def test_parse_user_text_partial_word_sync_is_t2():
     # 1 行目のみ逐字タグがあり 2 行目は行タイミングのみ → align() 側は T2 経路
     lrc = "[00:01.00] <00:01.00> 夜に <00:02.00> 駆ける\n[00:04.00] 君の声が聞こえる\n"
-    result = UserTextProvider(lrc).fetch("title", "artist")
-    assert result == LyricsResult(lrc, "T2")
+    lines, tier = parse_user_text(lrc)
+    assert tier == "T2"
+    assert len(lines) == 2
 
 
-def test_user_text_provider_plain_text_is_t3():
+def test_parse_user_text_plain_text_is_t3():
     plain = "夜に駆ける\n君の声が聞こえる\n"
-    result = UserTextProvider(plain).fetch("title", "artist")
-    assert result == LyricsResult(plain, "T3")
+    lines, tier = parse_user_text(plain)
+    assert tier == "T3"
+    assert len(lines) == 2
 
 
 def test_synced_lyrics_provider_enhanced_hit_is_t1(monkeypatch):

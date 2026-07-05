@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import NamedTuple, Protocol
 
-from .lrc import is_synced, is_word_synced, parse_lrc
+from .lrc import LyricLine, is_synced, is_word_synced, parse_lrc
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class SyncedLyricsProvider:
         return None
 
 
-def parse_user_text(lyrics_text: str) -> tuple[list, str]:
+def parse_user_text(lyrics_text: str) -> tuple[list[LyricLine], str]:
     """ユーザー供給テキストを1回のパースで (LyricLine リスト, tier) に変換する。
 
     align() の経路選択 (is_word_synced) と同じ基準で Tier を判定する。
@@ -96,32 +96,12 @@ def parse_user_text(lyrics_text: str) -> tuple[list, str]:
     return lines, tier
 
 
-class UserTextProvider:
-    """ユーザー供給の歌詞テキストを Tier 判定してそのまま返す。
-
-    ネットワーク検索は行わないため、常に非 None を返す (フォールバック対象外)。
-    """
-
-    name = "user_text"
-
-    def __init__(self, lyrics_text: str) -> None:
-        self._lyrics_text = lyrics_text
-
-    def fetch(self, title: str, artist: str) -> LyricsResult | None:
-        _, tier = parse_user_text(self._lyrics_text)
-        return LyricsResult(self._lyrics_text, tier)
-
-
-def build_provider_chain(lyrics_text: str | None, vocaloid: bool) -> list[LyricsProvider]:
+def build_provider_chain(vocaloid: bool) -> list[LyricsProvider]:
     """歌詞取得に使うプロバイダのチェーンを組み立てる。
 
-    ユーザー供給テキストがあればそれのみを使う (検索はスキップ)。
-    なければ syncedlyrics 経由のチェーンを使い、``vocaloid=True`` なら
+    syncedlyrics 経由のチェーンを使い、``vocaloid=True`` なら
     NetEase を優先する順序に並べ替える。
     """
-    if lyrics_text:
-        return [UserTextProvider(lyrics_text)]
-
     provider_names = _VOCALOID_PROVIDER_NAMES if vocaloid else _DEFAULT_PROVIDER_NAMES
     return [SyncedLyricsProvider(provider_names)]
 
