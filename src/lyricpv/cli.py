@@ -295,7 +295,11 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
     saved_config = effective_config_from_options(
-        options, source=source, lyrics_file=lyrics_file_to_save
+        options,
+        source=source,
+        lyrics_file=lyrics_file_to_save,
+        title=result.meta.get("title"),
+        artist=result.meta.get("artist"),
     )
     save_song_config(out_dir / SONG_TOML_FILENAME, saved_config)
 

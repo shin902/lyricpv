@@ -380,15 +380,21 @@ def effective_config_from_options(
     *,
     source: str,
     lyrics_file: str | None,
+    title: str | None = None,
+    artist: str | None = None,
 ) -> SongConfig:
     """解析に実際に使った ``PipelineOptions`` から、既定値でない値だけを
     含む ``SongConfig`` を組み立てる (song.toml への書き出し用)。
+
+    ``title`` / ``artist`` が与えられた場合は ``options`` の値を上書きする。
+    対話確認や歌詞検索の再試行でメタ情報が変更された場合、pipeline 側で
+    最終的な値を渡すことで song.toml に正しい値が残る。
     """
     rp = options.refine_params
     return SongConfig(
         source=source,
-        title=options.title,
-        artist=options.artist,
+        title=title if title is not None else options.title,
+        artist=artist if artist is not None else options.artist,
         vocaloid=options.vocaloid or None,
         lyrics_file=lyrics_file,
         separation=SeparationConfig(

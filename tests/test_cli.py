@@ -133,10 +133,47 @@ def test_analyze_writes_song_toml_after_success(monkeypatch, tmp_path):
     assert code == 0
     saved = load_song_config(out_dir)
     assert saved.source == "song.wav"
+    # pipeline で確定した title/artist が song.toml に残る
+    assert saved.title == "Test Title"
+    assert saved.artist == "Test Artist"
     assert saved.refine.enabled is True
     assert saved.refine.pad_ms == 600
     # 触れていないパラメータは既定値のため書き出されない
     assert saved.refine.min_match_ratio is None
+
+
+def test_analyze_saves_finalized_metadata_not_options(monkeypatch, tmp_path):
+    """対話確認で title/artist が変更された場合、pipeline から返った確定値が
+    song.toml に残る (options の pre-run 値ではない)。
+    """
+    monkeypatch.setattr(fetch_mod, "check_external_tools", lambda: [])
+
+    def fake_run(source, out_dir, *, options, **kwargs):
+        # options には pre-run 値が残っているが、pipeline は修正後の値を返す
+        assert options.title == "CLI Title"  # options は pre-run 値
+        return _DummyResult()
+
+    monkeypatch.setattr(pipeline_mod, "run", fake_run)
+
+    out_dir = tmp_path / "out"
+    code = cli_mod.main(
+        [
+            "analyze",
+            "song.wav",
+            "-o",
+            str(out_dir),
+            "--title",
+            "CLI Title",
+            "--artist",
+            "CLI Artist",
+        ]
+    )
+
+    assert code == 0
+    saved = load_song_config(out_dir)
+    # options の値ではなく、pipeline result の確定値が記録される
+    assert saved.title == "Test Title"
+    assert saved.artist == "Test Artist"
 
 
 def test_analyze_reanalyzes_from_directory_with_song_toml(monkeypatch, tmp_path):
@@ -354,6 +391,7 @@ class _DummyResult:
     json_path = "out/lyric_data.json"
     lyrics_tier = "T2"
     device_used = "cpu"
+    meta = {"title": "Test Title", "artist": "Test Artist"}
 
 
 class _DummyLine:

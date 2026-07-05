@@ -316,3 +316,29 @@ def test_effective_config_from_options_round_trips_non_default_refine_params():
     assert config.refine.pad_ms == 600
     assert config.refine.max_squashed_mid_chars == 2
     assert config.refine.min_match_ratio is None  # 既定値のまま
+
+
+def test_effective_config_from_options_title_artist_override():
+    """対話確認や歌詞検索で変更された title/artist が options の値を上書きする。"""
+    options = PipelineOptions(title="Original Title", artist="Original Artist")
+
+    config = effective_config_from_options(
+        options,
+        source="song.wav",
+        lyrics_file=None,
+        title="Final Title",
+        artist="Final Artist",
+    )
+
+    assert config.title == "Final Title"
+    assert config.artist == "Final Artist"
+
+
+def test_effective_config_from_options_title_artist_fallback():
+    """title/artist 未指定の場合は options の値にフォールバックする。"""
+    options = PipelineOptions(title="Original Title", artist="Original Artist")
+
+    config = effective_config_from_options(options, source="song.wav", lyrics_file=None)
+
+    assert config.title == "Original Title"
+    assert config.artist == "Original Artist"
