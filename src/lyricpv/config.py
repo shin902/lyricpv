@@ -99,6 +99,72 @@ class SongConfig:
     refine: RefineConfig = field(default_factory=RefineConfig)
 
 
+def _validate_scalar(raw: dict[str, Any], expected: dict[str, type], section: str) -> None:
+    """Validate that each non-None scalar value matches its expected TOML type.
+
+    TOML bool is a strict subtype that must not be accepted where int/str is expected
+    and vice-versa.  For ``float`` fields, ``int`` values are also accepted (application
+    policy for ratio fields) and normalized to ``float`` so the runtime value matches
+    the type annotation.
+    """
+    for key, value in raw.items():
+        if value is None:
+            continue
+        exp = expected.get(key)
+        if exp is None:
+            continue  # unknown-key check is handled elsewhere
+        if exp is bool:
+            if not isinstance(value, bool):
+                raise ConfigError(
+                    f"[{section}] {key} はブール値で指定してください (現在: {type(value).__name__})"
+                )
+        elif exp is str:
+            if not isinstance(value, str):
+                raise ConfigError(
+                    f"[{section}] {key} は文字列で指定してください (現在: {type(value).__name__})"
+                )
+        elif exp is int:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ConfigError(
+                    f"[{section}] {key} は整数で指定してください (現在: {type(value).__name__})"
+                )
+        elif exp is float:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ConfigError(
+                    f"[{section}] {key} は数値で指定してください (現在: {type(value).__name__})"
+                )
+            if isinstance(value, int):
+                raw[key] = float(value)
+
+
+# ── per-section type schemas for _validate_scalar ──────────────────────────
+_TOP_LEVEL_SCHEMA: dict[str, type] = {
+    "source": str,
+    "title": str,
+    "artist": str,
+    "vocaloid": bool,
+    "lyrics_file": str,
+}
+_SEPARATION_SCHEMA: dict[str, type] = {
+    "model": str,
+    "device": str,
+    "skip": bool,
+}
+_ENHANCE_SCHEMA: dict[str, type] = {
+    "enabled": bool,
+    "karaoke_model": str,
+    "dereverb_model": str,
+}
+_REFINE_SCHEMA: dict[str, type] = {
+    "enabled": bool,
+    "model": str,
+    "pad_ms": int,
+    "min_match_ratio": float,
+    "min_char_score": float,
+    "max_squashed_mid_chars": int,
+}
+
+
 def _check_unknown(raw: dict[str, Any], allowed: set[str], section: str) -> None:
     unknown = set(raw) - allowed
     if unknown:
@@ -139,19 +205,22 @@ def load_song_config(path: str | Path) -> SongConfig:
     _check_unknown(enhance_raw, _ENHANCE_KEYS, "enhance")
     _check_unknown(refine_raw, _REFINE_KEYS, "refine")
 
-    try:
-        return SongConfig(
-            source=raw.get("source"),
-            title=raw.get("title"),
-            artist=raw.get("artist"),
-            vocaloid=raw.get("vocaloid"),
-            lyrics_file=raw.get("lyrics_file"),
-            separation=SeparationConfig(**separation_raw),
-            enhance=EnhanceConfig(**enhance_raw),
-            refine=RefineConfig(**refine_raw),
-        )
-    except TypeError as e:
-        raise ConfigError(f"song.toml のキーの型が不正です ({path}): {e}") from e
+    # Validate scalar types before constructing dataclasses
+    _validate_scalar(raw, _TOP_LEVEL_SCHEMA, "top-level")
+    _validate_scalar(separation_raw, _SEPARATION_SCHEMA, "separation")
+    _validate_scalar(enhance_raw, _ENHANCE_SCHEMA, "enhance")
+    _validate_scalar(refine_raw, _REFINE_SCHEMA, "refine")
+
+    return SongConfig(
+        source=raw.get("source"),
+        title=raw.get("title"),
+        artist=raw.get("artist"),
+        vocaloid=raw.get("vocaloid"),
+        lyrics_file=raw.get("lyrics_file"),
+        separation=SeparationConfig(**separation_raw),
+        enhance=EnhanceConfig(**enhance_raw),
+        refine=RefineConfig(**refine_raw),
+    )
 
 
 def _toml_scalar(value: Any) -> str:

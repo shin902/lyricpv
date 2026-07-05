@@ -97,6 +97,109 @@ pad_m = 600
         load_song_config(tmp_path)
 
 
+def test_load_song_config_rejects_string_for_bool_field(tmp_path):
+    """skip = \"false\" should raise ConfigError, not silently become truthy."""
+    (tmp_path / "song.toml").write_text(
+        """
+[separation]
+skip = "false"
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="skip"):
+        load_song_config(tmp_path)
+
+
+def test_load_song_config_rejects_string_for_int_field(tmp_path):
+    """pad_ms = \"600\" should raise ConfigError."""
+    (tmp_path / "song.toml").write_text(
+        """
+[refine]
+pad_ms = "600"
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="pad_ms"):
+        load_song_config(tmp_path)
+
+
+def test_load_song_config_rejects_bool_for_int_field(tmp_path):
+    """pad_ms = true should raise ConfigError (bool is not int in TOML)."""
+    (tmp_path / "song.toml").write_text(
+        """
+[refine]
+pad_ms = true
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="pad_ms"):
+        load_song_config(tmp_path)
+
+
+def test_load_song_config_rejects_bool_for_str_field(tmp_path):
+    """model = true should raise ConfigError."""
+    (tmp_path / "song.toml").write_text(
+        """
+[separation]
+model = true
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="model"):
+        load_song_config(tmp_path)
+
+
+def test_load_song_config_rejects_int_for_bool_field(tmp_path):
+    """vocaloid = 1 should raise ConfigError."""
+    (tmp_path / "song.toml").write_text(
+        """
+vocaloid = 1
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="vocaloid"):
+        load_song_config(tmp_path)
+
+
+def test_load_song_config_rejects_float_for_int_field(tmp_path):
+    """pad_ms = 600.0 should raise ConfigError."""
+    (tmp_path / "song.toml").write_text(
+        """
+[refine]
+pad_ms = 600.0
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="pad_ms"):
+        load_song_config(tmp_path)
+
+
+def test_load_song_config_accepts_int_for_float_field(tmp_path):
+    """min_match_ratio = 1 should be accepted (int is valid for float field)."""
+    (tmp_path / "song.toml").write_text(
+        """
+[refine]
+min_match_ratio = 1
+""",
+        encoding="utf-8",
+    )
+    config = load_song_config(tmp_path)
+    assert config.refine.min_match_ratio == 1.0  # normalized to float
+
+
+def test_load_song_config_rejects_string_for_float_field(tmp_path):
+    """min_char_score = \"0.5\" should raise ConfigError."""
+    (tmp_path / "song.toml").write_text(
+        """
+[refine]
+min_char_score = "0.5"
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="min_char_score"):
+        load_song_config(tmp_path)
+
+
 def test_save_then_load_round_trip(tmp_path):
     config = SongConfig(
         source="song.wav",
